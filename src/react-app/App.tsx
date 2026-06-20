@@ -36,13 +36,6 @@ function getStatus(stat: number) {
   return STATUS_MAP[stat] || { label: "未知", cls: "" };
 }
 
-function formatTime(ts: number) {
-  return new Date(ts * 1000).toLocaleTimeString("zh-CN", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 function App() {
   const [matches, setMatches] = useState<MatchData[]>([]);
   const [loading, setLoading] = useState(true);
