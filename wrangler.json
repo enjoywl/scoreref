@@ -8,6 +8,12 @@
 		"enabled": true
 	},
 	"upload_source_maps": true,
+	"vpc_services": [
+		{
+			"binding": "VPC_SERVICE",
+			"id": "019ee405-bfe8-7903-bebd-83312960a38f"
+		}
+	],
 	"assets": {
 		"directory": "./dist/client",
 		"not_found_handling": "single-page-application"
