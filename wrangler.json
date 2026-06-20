@@ -11,7 +11,7 @@
 	"vpc_services": [
 		{
 			"binding": "VPC_SERVICE",
-			"id": "019ee405-bfe8-7903-bebd-83312960a38f"
+			"service_id": "019ee405-bfe8-7903-bebd-83312960a38f"
 		}
 	],
 	"assets": {
