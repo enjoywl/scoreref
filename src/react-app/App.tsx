@@ -1,66 +1,132 @@
-// src/App.tsx
-
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import viteLogo from "/vite.svg";
-import cloudflareLogo from "./assets/Cloudflare_Logo.svg";
-import honoLogo from "./assets/hono.svg";
+import { useEffect, useState } from "react";
 import "./App.css";
 
-function App() {
-	const [count, setCount] = useState(0);
-	const [name, setName] = useState("unknown");
+interface MatchData {
+  mid: string;
+  cty: string;
+  lnam: string;
+  lpc: string;
+  mtim: number;
+  stat: number;
+  hnam: string;
+  anam: string;
+  hscr: number;
+  ascr: number;
+  hhsc: number;
+  ahsc: number;
+  hpc: string;
+  apc: string;
+  seas: string;
+  locn?: string;
+}
 
-	return (
-		<>
-			<div>
-				<a href="https://vite.dev" target="_blank">
-					<img src={viteLogo} className="logo" alt="Vite logo" />
-				</a>
-				<a href="https://react.dev" target="_blank">
-					<img src={reactLogo} className="logo react" alt="React logo" />
-				</a>
-				<a href="https://hono.dev/" target="_blank">
-					<img src={honoLogo} className="logo cloudflare" alt="Hono logo" />
-				</a>
-				<a href="https://workers.cloudflare.com/" target="_blank">
-					<img
-						src={cloudflareLogo}
-						className="logo cloudflare"
-						alt="Cloudflare logo"
-					/>
-				</a>
-			</div>
-			<h1>Vite + React + Hono + Cloudflare</h1>
-			<div className="card">
-				<button
-					onClick={() => setCount((count) => count + 1)}
-					aria-label="increment"
-				>
-					count is {count}
-				</button>
-				<p>
-					Edit <code>src/App.tsx</code> and save to test HMR
-				</p>
-			</div>
-			<div className="card">
-				<button
-					onClick={() => {
-						fetch("/api/")
-							.then((res) => res.json() as Promise<{ name: string }>)
-							.then((data) => setName(data.name));
-					}}
-					aria-label="get name"
-				>
-					Name from API is: {name}
-				</button>
-				<p>
-					Edit <code>worker/index.ts</code> to change the name
-				</p>
-			</div>
-			<p className="read-the-docs">Click on the logos to learn more</p>
-		</>
-	);
+interface ApiResponse {
+  code: number;
+  message: string;
+  data: MatchData[];
+}
+
+const STATUS_MAP: Record<number, { label: string; cls: string }> = {
+  1: { label: "进行中", cls: "status-live" },
+  2: { label: "中场", cls: "status-ht" },
+  3: { label: "已结束", cls: "status-ft" },
+};
+
+function getStatus(stat: number) {
+  return STATUS_MAP[stat] || { label: "未知", cls: "" };
+}
+
+function formatTime(ts: number) {
+  return new Date(ts * 1000).toLocaleTimeString("zh-CN", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function App() {
+  const [matches, setMatches] = useState<MatchData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [groupBy, setGroupBy] = useState<"league" | "country">("league");
+
+  useEffect(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    fetch(`/api/matches?date=${today}&status=1`)
+      .then((res) => res.json())
+      .then((json: ApiResponse) => {
+        if (json.code === 200) {
+          setMatches(json.data);
+        } else {
+          setError(json.message || "Failed to load");
+        }
+      })
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const grouped = new Map<string, MatchData[]>();
+  matches.forEach((m) => {
+    const key = groupBy === "league" ? m.lnam : m.cty;
+    const list = grouped.get(key) || [];
+    list.push(m);
+    grouped.set(key, list);
+  });
+
+  if (loading) return <div className="loading">加载中...</div>;
+  if (error) return <div className="error">加载失败: {error}</div>;
+
+  return (
+    <div className="app">
+      <header className="header">
+        <h1>live score</h1>
+        <div className="controls">
+          <label>
+            <select value={groupBy} onChange={(e) => setGroupBy(e.target.value as "league" | "country")}>
+              <option value="league">按联赛</option>
+              <option value="country">按国家</option>
+            </select>
+          </label>
+          <span className="count">共 {matches.length} 场</span>
+        </div>
+      </header>
+
+      {Array.from(grouped.entries()).map(([group, list]) => (
+        <section key={group} className="group">
+          <h2 className="group-title">
+            {list[0]?.lpc && <img src={list[0].lpc} alt="" className="league-logo" />}
+            {group}
+          </h2>
+          <div className="match-list">
+            {list.map((m) => {
+              const s = getStatus(m.stat);
+              return (
+                <div key={m.mid} className="match-card">
+                  <div className="match-info">
+                    <span className={`status-badge ${s.cls}`}>{s.label}</span>
+                    {m.locn && <span className="venue">{m.locn}</span>}
+                  </div>
+                  <div className="match-body">
+                    <div className="team team-left">
+                      <img src={m.hpc} alt={m.hnam} className="team-logo" />
+                      <span className="team-name">{m.hnam}</span>
+                    </div>
+                    <div className="score">
+                      <span className="score-main">{m.hscr} - {m.ascr}</span>
+                      <span className="score-ht">({m.hhsc} - {m.ahsc})</span>
+                    </div>
+                    <div className="team team-right">
+                      <img src={m.apc} alt={m.anam} className="team-logo" />
+                      <span className="team-name">{m.anam}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
 }
 
 export default App;
