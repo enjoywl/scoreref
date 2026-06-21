@@ -8,7 +8,7 @@ type Env = {
 
 const app = new Hono<{ Bindings: Env }>();
 
-const CACHE_TTL = 30; // 边缘缓存 30 秒
+const CACHE_TTL = 30;
 
 const PICK_FIELDS = [
   "mid", "cty", "lnam", "lpc", "mtim", "stat",
@@ -40,15 +40,29 @@ app.get("/api/matches", async (c) => {
   }
 
   // --- 2. 回源拉取 ---
+  const hasVpc = !!c.env.VPC_SERVICE;
+  const vpcUrl = `http://api.scoreref.com:8090${path}`;
+  const publicUrl = `http://106.42.192.93:8090${path}`;
+
+  console.log({ hasVpc, vpcUrl, publicUrl });
+
   let sourceResp: Response;
-  if (c.env.VPC_SERVICE) {
-    sourceResp = await c.env.VPC_SERVICE.fetch(`http://api.sporthing.com:8090${path}`);
-  } else {
-    sourceResp = await fetch(`http://106.42.192.93:8090${path}`);
+  try {
+    if (hasVpc) {
+      sourceResp = await c.env.VPC_SERVICE!.fetch(vpcUrl);
+    } else {
+      sourceResp = await fetch(publicUrl);
+    }
+  } catch (err: any) {
+    console.error("fetch error", err.message);
+    return c.json({ error: `Fetch failed: ${err.message}` }, 502);
   }
 
   if (!sourceResp.ok) {
-    return c.json({ error: "Failed to fetch matches" }, 502);
+    console.error("upstream error", { status: sourceResp.status, statusText: sourceResp.statusText });
+    const body = await sourceResp.text().catch(() => "");
+    console.error("upstream body", body.slice(0, 500));
+    return c.json({ error: `Upstream returned ${sourceResp.status}`, detail: body.slice(0, 200) }, 502);
   }
 
   const json: any = await sourceResp.json();
@@ -56,10 +70,8 @@ app.get("/api/matches", async (c) => {
     return c.json(json);
   }
 
-  // --- 3. 裁剪字段，减少传输量 ---
+  // --- 3. 裁剪 + 缓存 ---
   json.data = stripFields(json.data);
-
-  // --- 4. 写入缓存，返回 ---
   const result = Response.json(json);
   result.headers.set("Cache-Control", `public, max-age=${CACHE_TTL}`);
   c.executionCtx.waitUntil(cache.put(cacheKey, result.clone()));
