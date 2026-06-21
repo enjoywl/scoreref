@@ -36,9 +36,10 @@
 	"scripts": {
 		"build": "tsc -b && vite build",
 		"cf-typegen": "wrangler types",
-		"check": "tsc && vite build && wrangler deploy --dry-run",
-		"deploy": "wrangler deploy",
+		"check": "tsc && vite build && wrangler deploy --dry-run --env production",
+		"deploy": "wrangler deploy --env production",
 		"dev": "vite",
+		"dev:remote": "wrangler dev --remote --env production",
 		"lint": "eslint .",
 		"preview": "npm run build && vite preview"
 	},

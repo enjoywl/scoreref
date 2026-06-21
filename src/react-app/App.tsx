@@ -86,7 +86,7 @@ function App() {
       {Array.from(grouped.entries()).map(([group, list]) => (
         <section key={group} className="group">
           <h2 className="group-title">
-            {list[0]?.lpc && <img src={list[0].lpc} alt="" className="league-logo" />}
+            {list[0]?.lpc && <img loading="lazy" decoding="async" src={list[0].lpc} alt="" className="league-logo" />}
             {group}
           </h2>
           <div className="match-list">
@@ -100,7 +100,7 @@ function App() {
                   </div>
                   <div className="match-body">
                     <div className="team team-left">
-                      <img src={m.hpc} alt={m.hnam} className="team-logo" />
+                      <img loading="lazy" decoding="async" src={m.hpc} alt={m.hnam} className="team-logo" />
                       <span className="team-name">{m.hnam}</span>
                     </div>
                     <div className="score">
@@ -108,7 +108,7 @@ function App() {
                       <span className="score-ht">({m.hhsc} - {m.ahsc})</span>
                     </div>
                     <div className="team team-right">
-                      <img src={m.apc} alt={m.anam} className="team-logo" />
+                      <img loading="lazy" decoding="async" src={m.apc} alt={m.anam} className="team-logo" />
                       <span className="team-name">{m.anam}</span>
                     </div>
                   </div>

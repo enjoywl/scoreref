@@ -4,18 +4,23 @@
 	"main": "./src/worker/index.ts",
 	"compatibility_date": "2025-10-08",
 	"compatibility_flags": ["nodejs_compat"],
+	"placement": { "mode": "smart" },
 	"observability": {
 		"enabled": true
 	},
 	"upload_source_maps": true,
-	"vpc_services": [
-		{
-			"binding": "VPC_SERVICE",
-			"service_id": "019ee405-bfe8-7903-bebd-83312960a38f"
-		}
-	],
 	"assets": {
 		"directory": "./dist/client",
 		"not_found_handling": "single-page-application"
+	},
+	"env": {
+		"production": {
+			"vpc_services": [
+				{
+					"binding": "VPC_SERVICE",
+					"service_id": "019ee405-bfe8-7903-bebd-83312960a38f"
+				}
+			]
+		}
 	}
 }
