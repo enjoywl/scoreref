@@ -41,7 +41,7 @@ app.get("/api/matches", async (c) => {
 
   // --- 2. 回源拉取 ---
   const hasVpc = !!c.env.VPC_SERVICE;
-  const vpcUrl = `http://api.scoreref.com:8090${path}`;
+  const vpcUrl = `http://106.42.192.93:8090${path}`;
   const publicUrl = `http://106.42.192.93:8090${path}`;
 
   console.log({ hasVpc, vpcUrl, publicUrl });
