@@ -2,7 +2,7 @@
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "scoreref",
 	"main": "./src/worker/index.ts",
-	"compatibility_date": "2025-10-08",
+	"compatibility_date": "2026-06-21",
 	"compatibility_flags": ["nodejs_compat"],
 	"placement": { "mode": "smart" },
 	"observability": {
@@ -18,7 +18,8 @@
 			"vpc_services": [
 				{
 					"binding": "VPC_SERVICE",
-					"service_id": "019ee405-bfe8-7903-bebd-83312960a38f"
+					"service_id": "019ee405-bfe8-7903-bebd-83312960a38f",
+					"remote": true
 				}
 			]
 		}
