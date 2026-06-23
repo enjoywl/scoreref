@@ -47,15 +47,15 @@ app.get("/api/matches", async (c) => {
   console.log({ hasVpc, vpcUrl, publicUrl });
 
   let sourceResp: Response;
-  try {
-    if (hasVpc) {
+  if (hasVpc) {
+    try {
       sourceResp = await c.env.VPC_SERVICE!.fetch(vpcUrl);
-    } else {
+    } catch (err: any) {
+      console.warn("VPC fetch failed, fallback to direct", err.message);
       sourceResp = await fetch(publicUrl);
     }
-  } catch (err: any) {
-    console.error("fetch error", err.message);
-    return c.json({ error: `Fetch failed: ${err.message}` }, 502);
+  } else {
+    sourceResp = await fetch(publicUrl);
   }
 
   if (!sourceResp.ok) {

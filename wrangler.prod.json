@@ -12,5 +12,12 @@
 	"assets": {
 		"directory": "./dist/client",
 		"not_found_handling": "single-page-application"
-	}
+	},
+	"vpc_services": [
+		{
+			"binding": "VPC_SERVICE",
+			"service_id": "019ee405-bfe8-7903-bebd-83312960a38f",
+			"remote": true
+		}
+	]
 }
