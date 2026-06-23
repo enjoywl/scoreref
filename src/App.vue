@@ -24,6 +24,7 @@ interface MatchData {
 const { t, locale, setLocale } = useI18n();
 
 const isDark = ref(true);
+document.documentElement.classList.add("dark");
 
 function toggleTheme() {
   isDark.value = !isDark.value;
@@ -98,7 +99,7 @@ watch(locale, () => {
 });
 
 async function fetchMatches() {
-  loading.value = true;
+  if (matches.value.length === 0) loading.value = true;
   error.value = null;
   try {
     const params = new URLSearchParams({ date: selectedDate.value });
@@ -266,6 +267,13 @@ function getMatchTime(m: MatchData) {
     </section>
     </template>
   </div>
+
+  <footer class="footer">
+    <div class="footer-content">
+      <p class="footer-desc">This system is currently under development. Data accuracy and real-time updates are still being improved.</p>
+      <p>Contact: <a href="mailto:exprify@gmail.com">exprify@gmail.com</a></p>
+    </div>
+  </footer>
 </template>
 
 <style>
@@ -280,6 +288,45 @@ body {
 html.dark body {
   background: #0f0f0f;
   color: #e0e0e0;
+}
+
+.footer {
+  text-align: center;
+  padding: 32px 16px 24px;
+  font-size: 13px;
+  color: #999;
+  background: #1a1a1a;
+  margin-top: 40px;
+  border-top: 1px solid #2a2a2a;
+}
+
+.footer-desc {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: #aaa;
+}
+
+html.dark .footer-desc {
+  color: #555;
+}
+
+.footer a {
+  color: #4fc3f7;
+  text-decoration: none;
+}
+
+.footer a:hover {
+  text-decoration: underline;
+}
+
+html:not(.dark) .footer {
+  background: #e8e8e8;
+  border-top-color: #d0d0d0;
+  color: #888;
+}
+
+html.dark .footer {
+  color: #666;
 }
 </style>
 
