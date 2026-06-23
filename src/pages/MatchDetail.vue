@@ -86,16 +86,15 @@ async function loadMatchData(mid: string) {
   loading.value = true;
   activeTab.value = "live";
 
-  const data = await fetchData(mid, "info");
-  if (data) info.value = data;
-
-  const [inc, com, ln, st, h2] = await Promise.all([
+  const [data, inc, com, ln, st, h2] = await Promise.all([
+    fetchData(mid, "info"),
     fetchData(mid, "incidents"),
     fetchData(mid, "livetext"),
     fetchData(mid, "lineups"),
     fetchData(mid, "stats"),
     fetchData(mid, "h2h"),
   ]);
+  if (data) info.value = data;
   if (inc?.incd) incidents.value = inc.incd;
   if (com?.cms) commentary.value = com.cms;
   if (ln) {
