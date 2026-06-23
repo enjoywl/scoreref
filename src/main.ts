@@ -4,8 +4,10 @@ import "element-plus/dist/index.css";
 import "element-plus/theme-chalk/dark/css-vars.css";
 import App from "./App.vue";
 import { createI18n } from "./locales";
+import router from "./router";
 
 const app = createApp(App);
 app.use(ElementPlus);
 app.use(createI18n());
+app.use(router);
 app.mount("#app");

@@ -15,7 +15,8 @@
 	"dependencies": {
 		"element-plus": "^2.9.0",
 		"hono": "4.11.1",
-		"vue": "^3.5.0"
+		"vue": "^3.5.0",
+		"vue-router": "^4.6.4"
 	},
 	"devDependencies": {
 		"@cloudflare/vite-plugin": "1.15.3",
