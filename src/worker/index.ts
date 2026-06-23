@@ -1,5 +1,4 @@
 import { Hono } from "hono";
-import { compress } from "hono/compress";
 
 type Env = {
   VPC_SERVICE?: {
@@ -8,8 +7,6 @@ type Env = {
 };
 
 const app = new Hono<{ Bindings: Env }>();
-
-app.use(compress());
 
 const CACHE_TTL = 30;
 const BASE = "http://106.42.192.93:8090";
