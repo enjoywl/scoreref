@@ -218,20 +218,12 @@ export default function MatchDetail() {
   /* ---- Render ---- */
   return (
     <div className="max-w-[1200px] mx-auto p-4">
-      {/* Skeleton */}
+      {/* Hero skeleton while loading */}
       {loading && (
-        <div className="flex flex-col gap-4">
-          <div className="bg-surface rounded-2xl p-4 sm:p-6 border border-border flex flex-col items-center gap-3">
-            <div className="w-[140px] sm:w-[180px] h-3.5 rounded-md animate-pulse bg-gradient-to-r from-skeleton-from via-skeleton-via to-skeleton-to bg-[length:200%_100%]" />
-            <div className="w-[100px] sm:w-[120px] h-8 sm:h-9 rounded-md animate-pulse bg-gradient-to-r from-skeleton-from via-skeleton-via to-skeleton-to bg-[length:200%_100%]" />
-            <div className="w-[200px] sm:w-[260px] h-3 rounded-md animate-pulse bg-gradient-to-r from-skeleton-from via-skeleton-via to-skeleton-to bg-[length:200%_100%]" />
-          </div>
-          {[1, 2, 3].map(i => (
-            <div key={i} className="bg-surface rounded-xl p-4 border border-border flex flex-col gap-2.5">
-              <div className="w-[100px] h-3.5 rounded-md animate-pulse bg-gradient-to-r from-skeleton-from via-skeleton-via to-skeleton-to bg-[length:200%_100%]" />
-              <div className="w-full h-3 rounded-md animate-pulse bg-gradient-to-r from-skeleton-from via-skeleton-via to-skeleton-to bg-[length:200%_100%]" />
-            </div>
-          ))}
+        <div className="bg-surface rounded-2xl p-4 sm:p-6 border border-border flex flex-col items-center gap-3 mb-5">
+          <div className="w-[140px] sm:w-[180px] h-3.5 rounded-md animate-pulse bg-gradient-to-r from-skeleton-from via-skeleton-via to-skeleton-to bg-[length:200%_100%]" />
+          <div className="w-[100px] sm:w-[120px] h-8 sm:h-9 rounded-md animate-pulse bg-gradient-to-r from-skeleton-from via-skeleton-via to-skeleton-to bg-[length:200%_100%]" />
+          <div className="w-[200px] sm:w-[260px] h-3 rounded-md animate-pulse bg-gradient-to-r from-skeleton-from via-skeleton-via to-skeleton-to bg-[length:200%_100%]" />
         </div>
       )}
 
@@ -239,7 +231,7 @@ export default function MatchDetail() {
       {!loading && !info && <div className="text-center py-16 text-[#e53935]">Failed to load match data</div>}
 
       {/* Content */}
-      {!loading && info && (
+      {info && (
         <>
           {/* Hero */}
           <div className={`mb-5 p-5 md:p-6 rounded-2xl border relative overflow-hidden before:absolute before:top-0 before:left-0 before:right-0 before:h-[3px] ${heroGradient}

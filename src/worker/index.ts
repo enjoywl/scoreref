@@ -4,6 +4,9 @@ type Env = {
   VPC_SERVICE?: {
     fetch: (url: string) => Promise<Response>;
   };
+  ASSETS?: {
+    fetch: (request: Request) => Promise<Response>;
+  };
 };
 
 const app = new Hono<{ Bindings: Env }>();
@@ -47,7 +50,13 @@ async function fetchFromOrigin(path: string, env: Env) {
     return null;
   }
 
-  const json: any = await resp.json();
+  let json: any;
+  try {
+    json = await resp.json();
+  } catch {
+    console.error("upstream returned non-JSON");
+    return null;
+  }
   if (json.code !== 200) return json;
   return json;
 }
@@ -218,5 +227,22 @@ function pickInfoFields(d: any) {
     hpc: d.hpc, apc: d.apc,
   };
 }
+
+// --- Global error handler: keep API errors as JSON ---
+app.onError((err, c) => {
+  console.error("Worker error", err.message);
+  if (c.req.path.startsWith("/api/")) {
+    return c.json({ code: 500, message: "Internal error" }, 500);
+  }
+  // Non-API: let static assets handle it
+  if (c.env.ASSETS) return c.env.ASSETS.fetch(c.req.raw);
+  return c.text("Internal Server Error", 500);
+});
+
+// --- Fallback: non-API requests go to static assets ---
+app.notFound((c) => {
+  if (c.env.ASSETS) return c.env.ASSETS.fetch(c.req.raw);
+  return c.text("Not Found", 404);
+});
 
 export default app;
