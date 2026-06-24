@@ -56,16 +56,35 @@ function isSuccess(json: any) {
   return json.code === 200 || json.code === 0;
 }
 
-const EDGE_CACHE_TTL = 30;
+const EDGE_MAX_AGE = 30;
+const EDGE_SWR = 120;
 
 async function cachedProxy(c: any, path: string, cacheKey: string, env: Env, pickFields?: readonly string[]) {
   const cache = caches.default;
   const ck = new Request(`https://cache.internal/${cacheKey}`);
   const cached = await cache.match(ck);
+
   if (cached) {
-    // Strip cache headers from cached response so browser doesn't cache it
+    const age = parseInt(cached.headers.get("X-Cache-Age") || "0");
+    const now = Date.now();
+    // If stale, revalidate in background while returning cached
+    if (now - age > EDGE_MAX_AGE * 1000) {
+      c.executionCtx.waitUntil(
+        fetchFromOrigin(path, env).then(json => {
+          if (json && isSuccess(json)) {
+            if (pickFields && Array.isArray(json.data)) {
+              json.data = stripFields(json.data, pickFields);
+            }
+            const entry = Response.json(json);
+            entry.headers.set("Cache-Control", `public, max-age=${EDGE_MAX_AGE}, stale-while-revalidate=${EDGE_SWR}`);
+            entry.headers.set("X-Cache-Age", String(Date.now()));
+            return cache.put(ck, entry);
+          }
+        }).catch(() => {})
+      );
+    }
     const resp = new Response(cached.body, cached);
-    resp.headers.set("Cache-Control", "no-store");
+    resp.headers.set("Cache-Control", "public, max-age=10");
     return resp;
   }
 
@@ -78,13 +97,12 @@ async function cachedProxy(c: any, path: string, cacheKey: string, env: Env, pic
     json.data = stripFields(json.data, pickFields);
   }
 
-  // Cache API entry: allow edge cache for TTL
   const cacheEntry = Response.json(json);
-  cacheEntry.headers.set("Cache-Control", `public, max-age=${EDGE_CACHE_TTL}`);
+  cacheEntry.headers.set("Cache-Control", `public, max-age=${EDGE_MAX_AGE}, stale-while-revalidate=${EDGE_SWR}`);
+  cacheEntry.headers.set("X-Cache-Age", String(Date.now()));
   c.executionCtx.waitUntil(cache.put(ck, cacheEntry));
 
-  // Client response: prevent browser caching
-  return Response.json(json, { headers: { "Cache-Control": "no-store" } });
+  return Response.json(json, { headers: { "Cache-Control": "public, max-age=10" } });
 }
 
 // --- Match list ---
@@ -133,45 +151,59 @@ app.get("/api/match/:mid/full", async (c) => {
   const cache = caches.default;
   const ck = new Request(`https://cache.internal/${cacheKey}`);
   const cached = await cache.match(ck);
+
   if (cached) {
+    const age = parseInt(cached.headers.get("X-Cache-Age") || "0");
+    if (Date.now() - age > EDGE_MAX_AGE * 1000) {
+      c.executionCtx.waitUntil(refreshFullCache(mid, c.env, cache, ck));
+    }
     const resp = new Response(cached.body, cached);
-    resp.headers.set("Cache-Control", "no-store");
+    resp.headers.set("Cache-Control", "public, max-age=10");
     return resp;
   }
 
-  const [info, inc, ln, h2h, txt, st] = await Promise.all([
-    fetchFromOrigin(`/v2/api/soccer/match/match-info?matchId=${mid}`, c.env),
-    fetchFromOrigin(`/v2/api/soccer/match/incidents?matchId=${mid}`, c.env),
-    fetchFromOrigin(`/v2/api/soccer/match/lineups?matchId=${mid}`, c.env),
-    fetchFromOrigin(`/v2/api/soccer/match/h2h?matchId=${mid}`, c.env),
-    fetchFromOrigin(`/v2/api/soccer/match/livetext?matchId=${mid}`, c.env),
-    fetchFromOrigin(`/v2/api/soccer/match/stats?matchId=${mid}`, c.env),
-  ]);
-
-  if (!info || !isSuccess(info)) {
+  const data = await fetchFullMatchData(mid, c.env);
+  if (!data) {
     return c.json({ code: 502, message: "Upstream error" }, 502);
   }
 
-  const data: any = {
-    info: pickInfoFields(info.data),
-    incidents: inc && isSuccess(inc) ? inc.data?.incd || [] : [],
-    lineups: extractLineups(ln),
-    h2h: h2h && isSuccess(h2h) ? (h2h.data?.evts || []).sort((a: any, b: any) => (b.stms || 0) - (a.stms || 0)) : [],
-    commentary: txt && isSuccess(txt) ? txt.data?.cms || [] : [],
-    stats: extractStats(st),
-  };
-
-  // Cache API entry: allow edge cache for TTL
   const cacheEntry = new Response(JSON.stringify({ code: 200, data }), {
-    headers: { "Content-Type": "application/json", "Cache-Control": `public, max-age=${EDGE_CACHE_TTL}` },
+    headers: { "Content-Type": "application/json", "Cache-Control": `public, max-age=${EDGE_MAX_AGE}, stale-while-revalidate=${EDGE_SWR}`, "X-Cache-Age": String(Date.now()) },
   });
   c.executionCtx.waitUntil(cache.put(ck, cacheEntry));
 
-  // Client response: prevent browser caching
   return new Response(JSON.stringify({ code: 200, data }), {
-    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+    headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=10" },
   });
 });
+
+async function fetchFullMatchData(mid: string, env: Env) {
+  const [info, inc] = await Promise.all([
+    fetchFromOrigin(`/v2/api/soccer/match/match-info?matchId=${mid}`, env),
+    fetchFromOrigin(`/v2/api/soccer/match/incidents?matchId=${mid}`, env),
+  ]);
+
+  if (!info || !isSuccess(info)) return null;
+
+  return {
+    info: pickInfoFields(info.data),
+    incidents: inc && isSuccess(inc) ? inc.data?.incd || [] : [],
+  };
+}
+
+async function refreshFullCache(mid: string, env: Env, cache: Cache, ck: Request) {
+  try {
+    const data = await fetchFullMatchData(mid, env);
+    if (data) {
+      const entry = new Response(JSON.stringify({ code: 200, data }), {
+        headers: { "Content-Type": "application/json", "Cache-Control": `public, max-age=${EDGE_MAX_AGE}, stale-while-revalidate=${EDGE_SWR}`, "X-Cache-Age": String(Date.now()) },
+      });
+      await cache.put(ck, entry);
+    }
+  } catch (err) {
+    // silent background refresh failure
+  }
+}
 
 function pickInfoFields(d: any) {
   if (!d) return null;
@@ -185,27 +217,6 @@ function pickInfoFields(d: any) {
     hmgr: d.hmgr, amgr: d.amgr, rfee: d.rfee,
     hpc: d.hpc, apc: d.apc,
   };
-}
-
-function extractLineups(ln: any) {
-  if (!ln || !isSuccess(ln)) return null;
-  const home = ln.data?.home;
-  const away = ln.data?.away;
-  return {
-    home: { plrs: home?.plrs || [], form: home?.form || "" },
-    away: { plrs: away?.plrs || [], form: away?.form || "" },
-  };
-}
-
-function extractStats(st: any) {
-  if (!st || !isSuccess(st)) return [];
-  return (st.data?.statistics || []).map((p: any) => ({
-    period: p.period,
-    groups: (p.groups || []).map((g: any) => ({
-      groupName: g.groupName,
-      items: g.statisticsItems || [],
-    })),
-  }));
 }
 
 export default app;

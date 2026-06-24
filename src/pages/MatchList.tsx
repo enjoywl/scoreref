@@ -82,7 +82,7 @@ export default function MatchList() {
     try {
       const params = new URLSearchParams({ date: selectedDate });
       if (statusFilter) params.set("status", statusFilter);
-      const res = await fetch(`/api/matches?${params}`, { cache: "no-cache" });
+      const res = await fetch(`/api/matches?${params}`);
       const json = await res.json();
       if (json.code === 200) {
         setMatches(json.data);

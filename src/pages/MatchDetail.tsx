@@ -124,30 +124,73 @@ export default function MatchDetail() {
   const [h2h, setH2h] = useState<H2hEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("live");
+  // Track which data has been fetched (for lazy loading)
+  const [fetched, setFetched] = useState({ commentary: false, stats: false, lineups: false, h2h: false });
+
+  async function fetchJSON(url: string) {
+    const res = await fetch(url);
+    const json = await res.json();
+    return json.code === 200 ? json.data : null;
+  }
 
   const loadMatchData = useCallback(async (matchId: string) => {
     setLoading(true);
     setActiveTab("live");
-    const res = await fetch(`/api/match/${matchId}/full`, { cache: "no-cache" });
-    const json = await res.json();
-    if (json.code === 200 && json.data) {
-      const d = json.data;
-      if (d.info) setInfo(d.info);
-      if (d.incidents) setIncidents(d.incidents);
-      if (d.commentary) setCommentary(d.commentary);
-      if (d.h2h) setH2h(d.h2h);
-      if (d.stats) setStats(d.stats);
-      if (d.lineups) {
-        const ln = d.lineups;
-        setLineups({
-          home: (ln.home?.plrs || []).map((p: any) => ({ player: p.player, shnm: p.shnm, posi: p.posi, subs: p.subs, capt: p.capt })),
-          away: (ln.away?.plrs || []).map((p: any) => ({ player: p.player, shnm: p.shnm, posi: p.posi, subs: p.subs, capt: p.capt })),
-          hform: ln.home?.form || "", aform: ln.away?.form || "",
-        });
-      }
+    setFetched({ commentary: false, stats: false, lineups: false, h2h: false });
+    setCommentary([]);
+    setStats([]);
+    setLineups(null);
+    setH2h([]);
+
+    const data = await fetchJSON(`/api/match/${matchId}/full`);
+    if (data) {
+      if (data.info) setInfo(data.info);
+      if (data.incidents) setIncidents(data.incidents);
     }
     setLoading(false);
+
+    // Load commentary + stats in background (needed for Live tab)
+    fetchJSON(`/api/match/${matchId}/livetext`).then(d => {
+      if (d) setCommentary(d.cms || []);
+      setFetched(f => ({ ...f, commentary: true }));
+    });
+    fetchJSON(`/api/match/${matchId}/stats`).then(d => {
+      if (d) {
+        setStats((d.statistics || []).map((p: any) => ({
+          period: p.period,
+          groups: (p.groups || []).map((g: any) => ({
+            groupName: g.groupName,
+            items: g.statisticsItems || [],
+          })),
+        })));
+      }
+      setFetched(f => ({ ...f, stats: true }));
+    });
   }, []);
+
+  // Lazy-load lineups when tab selected
+  function loadLineups() {
+    if (!mid || fetched.lineups || lineups !== null) return;
+    setFetched(f => ({ ...f, lineups: true }));
+    fetchJSON(`/api/match/${mid}/lineups`).then(d => {
+      if (d) {
+        setLineups({
+          home: (d.home?.plrs || []).map((p: any) => ({ player: p.player, shnm: p.shnm, posi: p.posi, subs: p.subs, capt: p.capt })),
+          away: (d.away?.plrs || []).map((p: any) => ({ player: p.player, shnm: p.shnm, posi: p.posi, subs: p.subs, capt: p.capt })),
+          hform: d.home?.form || "", aform: d.away?.form || "",
+        });
+      }
+    });
+  }
+
+  // Lazy-load h2h when tab selected
+  function loadH2h() {
+    if (!mid || fetched.h2h) return;
+    setFetched(f => ({ ...f, h2h: true }));
+    fetchJSON(`/api/match/${mid}/h2h`).then(d => {
+      if (d) setH2h((d.evts || []).sort((a: any, b: any) => (b.stms || 0) - (a.stms || 0)));
+    });
+  }
 
   useEffect(() => {
     if (mid) loadMatchData(mid);
@@ -268,7 +311,11 @@ export default function MatchDetail() {
               ].map(tab => (
                 <button
                   key={tab.key}
-                  onClick={() => setActiveTab(tab.key)}
+                  onClick={() => {
+                    setActiveTab(tab.key);
+                    if (tab.key === "lineups") loadLineups();
+                    if (tab.key === "h2h") loadH2h();
+                  }}
                   className={`text-[13px] px-4 py-2.5 font-medium transition-colors cursor-pointer border-b-2
                     ${activeTab === tab.key
                       ? "text-accent border-accent"
@@ -306,7 +353,14 @@ export default function MatchDetail() {
               )}
 
               {/* Stats */}
-              {allStats && (
+              {!fetched.stats ? (
+                <section>
+                  <h3 className="text-[15px] font-semibold text-text-secondary mb-3 pb-1.5 border-b border-border">Stats</h3>
+                  <div className="flex flex-col gap-3">
+                    {[1, 2, 3].map(i => <div key={i} className="h-5 bg-skeleton-from rounded animate-pulse" />)}
+                  </div>
+                </section>
+              ) : allStats && (
                 <section>
                   <h3 className="text-[15px] font-semibold text-text-secondary mb-3 pb-1.5 border-b border-border">Stats</h3>
                   <div className="flex flex-col gap-4">
@@ -449,7 +503,14 @@ export default function MatchDetail() {
               )}
 
               {/* Commentary */}
-              {commentary.length > 0 && (
+              {!fetched.commentary ? (
+                <section>
+                  <h3 className="text-[15px] font-semibold text-text-secondary mb-3 pb-1.5 border-b border-border">Commentary</h3>
+                  <div className="flex flex-col gap-2">
+                    {[1, 2, 3].map(i => <div key={i} className="h-4 bg-skeleton-from rounded animate-pulse" />)}
+                  </div>
+                </section>
+              ) : commentary.length > 0 && (
                 <section>
                   <h3 className="text-[15px] font-semibold text-text-secondary mb-3 pb-1.5 border-b border-border">Commentary</h3>
                   {commentary.map(c => (
@@ -466,7 +527,8 @@ export default function MatchDetail() {
 
           {/* === LINEUPS TAB === */}
           {activeTab === "lineups" && (
-            !lineups ? <div className="text-center py-16 text-text-muted">No lineup data</div>
+            !fetched.lineups ? <div className="flex justify-center py-16"><div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" /></div>
+            : !lineups ? <div className="text-center py-16 text-text-muted">No lineup data</div>
             : (
               <div className="flex flex-col gap-4">
                 {/* Team headers */}
@@ -554,7 +616,8 @@ export default function MatchDetail() {
 
           {/* === H2H TAB === */}
           {activeTab === "h2h" && (
-            !h2h.length ? <div className="text-center py-16 text-text-muted">No H2H data available</div>
+            !fetched.h2h ? <div className="flex justify-center py-16"><div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" /></div>
+            : !h2h.length ? <div className="text-center py-16 text-text-muted">No H2H data available</div>
             : (
               <div className="overflow-x-auto">
                 <table className="w-full border-separate border-spacing-0 text-[13px]">
