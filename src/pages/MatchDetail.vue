@@ -76,52 +76,34 @@ const activeTab = ref("live");
 
 const statusCls: Record<number, string> = { 1: "live", 2: "ht", 3: "ft" };
 
-async function fetchData(mid: string, api: string) {
-  const res = await fetch(`/api/match/${mid}/${api}`);
-  const json = await res.json();
-  return (json.code === 200 || json.code === 0) ? json.data : null;
-}
-
 async function loadMatchData(mid: string) {
   loading.value = true;
   activeTab.value = "live";
 
-  const [data, inc, com, ln, st, h2] = await Promise.all([
-    fetchData(mid, "info"),
-    fetchData(mid, "incidents"),
-    fetchData(mid, "livetext"),
-    fetchData(mid, "lineups"),
-    fetchData(mid, "stats"),
-    fetchData(mid, "h2h"),
-  ]);
-  if (data) info.value = data;
-  if (inc?.incd) incidents.value = inc.incd;
-  if (com?.cms) commentary.value = com.cms;
-  if (ln) {
-    const homePlayers = (ln.home?.plrs || []).map((p: any) => ({
-      player: p.player, shnm: p.shnm, posi: p.posi, subs: p.subs, capt: p.capt,
-    }));
-    const awayPlayers = (ln.away?.plrs || []).map((p: any) => ({
-      player: p.player, shnm: p.shnm, posi: p.posi, subs: p.subs, capt: p.capt,
-    }));
-    lineups.value = {
-      home: homePlayers,
-      away: awayPlayers,
-      hform: ln.home?.form || "",
-      aform: ln.away?.form || "",
-    };
-  }
-  if (st?.statistics) {
-    stats.value = st.statistics.map((period: any) => ({
-      period: period.period,
-      groups: (period.groups || []).map((g: any) => ({
-        groupName: g.groupName,
-        items: g.statisticsItems || [],
-      })),
-    }));
-  }
-  if (h2?.evts) {
-    h2h.value = h2.evts.sort((a: any, b: any) => (b.stms || 0) - (a.stms || 0));
+  const res = await fetch(`/api/match/${mid}/full`);
+  const json = await res.json();
+  if (json.code === 200 && json.data) {
+    const d = json.data;
+    if (d.info) info.value = d.info;
+    if (d.incidents) incidents.value = d.incidents;
+    if (d.commentary) commentary.value = d.commentary;
+    if (d.h2h) h2h.value = d.h2h;
+    if (d.stats) stats.value = d.stats;
+    if (d.lineups) {
+      const ln = d.lineups;
+      const homePlayers = (ln.home?.plrs || []).map((p: any) => ({
+        player: p.player, shnm: p.shnm, posi: p.posi, subs: p.subs, capt: p.capt,
+      }));
+      const awayPlayers = (ln.away?.plrs || []).map((p: any) => ({
+        player: p.player, shnm: p.shnm, posi: p.posi, subs: p.subs, capt: p.capt,
+      }));
+      lineups.value = {
+        home: homePlayers,
+        away: awayPlayers,
+        hform: ln.home?.form || "",
+        aform: ln.away?.form || "",
+      };
+    }
   }
 
   loading.value = false;
@@ -168,6 +150,22 @@ const matchTime = computed(() => {
 
 const allStats = computed(() => {
   return stats.value.find(s => s.period === "ALL") || stats.value[0];
+});
+
+function statBarHome(val: number, max: number) {
+  if (!max) return 0;
+  return Math.round((val / max) * 100);
+}
+function statBarAway(val: number, max: number) {
+  if (!max) return 0;
+  return Math.round((val / max) * 100);
+}
+
+const heroGradientCls = computed(() => {
+  if (!info.value) return "";
+  if (info.value.stat === 1) return "hero--live";
+  if (info.value.stat === 2) return "hero--ht";
+  return "hero--ft";
 });
 
 function getPositionedPlayers(players: LineupPlayer[], side: "home" | "away"): PositionedPlayer[] {
@@ -243,44 +241,64 @@ function getIncidentIcon(intp: string, incl?: string) {
 
 <template>
   <div class="detail-page">
-    <div v-if="loading" class="loading">{{ t('loading') }}</div>
+    <!-- Skeleton loading -->
+    <div v-if="loading" class="skel-detail">
+      <div class="skel-hero">
+        <div class="skel-line skel-lg"></div>
+        <div class="skel-line skel-xl"></div>
+        <div class="skel-line skel-md"></div>
+      </div>
+      <div class="skel-tabs">
+        <div class="skel-line skel-tab"></div>
+        <div class="skel-line skel-tab"></div>
+        <div class="skel-line skel-tab"></div>
+      </div>
+      <div v-for="i in 3" :key="'sk'+i" class="skel-block">
+        <div class="skel-line skel-hd"></div>
+        <div class="skel-line skel-full"></div>
+        <div class="skel-line skel-full"></div>
+      </div>
+    </div>
     <template v-else-if="info">
-      <div class="match-hero">
+      <div :class="['match-hero', heroGradientCls]">
         <!-- Top bar: back + league + round -->
         <div class="hero-top">
           <span class="back-btn" @click="goBack">&larr; Back</span>
-          <span class="hero-league">{{ info.lnam }}</span>
+          <span class="hero-league">
+            <img v-if="info.lpc" :src="info.lpc" alt="" class="hero-lpc" />
+            {{ info.lnam }}
+          </span>
           <span class="round" v-if="info.round">{{ info.round }}</span>
         </div>
 
         <!-- Teams + score -->
         <div class="hero-main">
           <div class="hero-team hero-home">
-            <img :src="info.hpc" :alt="info.hnam" class="hero-logo" />
+            <div class="hero-logo-wrap">
+              <img :src="info.hpc" :alt="info.hnam" class="hero-logo" />
+            </div>
             <span class="hero-name">{{ info.hnam }}</span>
           </div>
           <div class="hero-score">
             <div class="hero-score-main">{{ info.hscr }} - {{ info.ascr }}</div>
-            <div class="hero-score-sub">({{ info.hhsc }} - {{ info.ahsc }})</div>
+            <div class="hero-score-sub" v-if="info.stat >= 2">({{ info.hhsc }} - {{ info.ahsc }})</div>
             <div :class="['hero-status', statusCls[info.stat]]">{{ matchTime }}</div>
           </div>
           <div class="hero-team hero-away">
-            <img :src="info.apc" :alt="info.anam" class="hero-logo" />
+            <div class="hero-logo-wrap">
+              <img :src="info.apc" :alt="info.anam" class="hero-logo" />
+            </div>
             <span class="hero-name">{{ info.anam }}</span>
           </div>
         </div>
 
         <!-- Match info strip -->
         <div class="hero-info-strip">
-          <span class="hi-item" v-if="info.seas">{{ info.seas }}</span>
-          <span class="hi-sep" v-if="info.seas">·</span>
-          <span class="hi-item">{{ formatTime(info.mtim) }}</span>
-          <span class="hi-sep">·</span>
-          <span class="hi-item" v-if="info.locn">{{ info.locn }}</span>
-          <span class="hi-sep" v-if="info.locn">·</span>
-          <span class="hi-item" v-if="info.weat">{{ info.weat }} {{ info.temp }}</span>
-          <span class="hi-sep" v-if="!info.locn && !info.weat">·</span>
-          <span class="hi-item">Ref: {{ info.rfee || '-' }}</span>
+          <span class="hi-chip" v-if="info.seas">{{ info.seas }}</span>
+          <span class="hi-chip">{{ formatTime(info.mtim) }}</span>
+          <span class="hi-chip" v-if="info.locn">{{ info.locn }}</span>
+          <span class="hi-chip" v-if="info.weat">{{ info.weat }} {{ info.temp }}</span>
+          <span class="hi-chip">Ref: {{ info.rfee || '-' }}</span>
         </div>
       </div>
 
@@ -306,7 +324,10 @@ function getIncidentIcon(intp: string, incl?: string) {
                 <div class="stats-group-name">{{ g.groupName }}</div>
                 <div v-for="it in g.items" :key="it.key || it.name" class="stats-bar-row">
                   <span class="stats-val stats-home">{{ it.home }}</span>
-                  <span class="stats-name">{{ it.name }}</span>
+                  <div class="stats-bar-track">
+                    <div class="stats-bar-home" :style="{ width: statBarHome(it.homeValue, Math.max(it.homeValue, it.awayValue)) + '%' }"></div>
+                    <div class="stats-bar-away" :style="{ width: statBarAway(it.awayValue, Math.max(it.homeValue, it.awayValue)) + '%' }"></div>
+                  </div>
                   <span class="stats-val stats-away">{{ it.away }}</span>
                 </div>
               </div>
@@ -586,35 +607,68 @@ function getIncidentIcon(intp: string, incl?: string) {
   padding: 16px;
 }
 
-.loading, .error, .empty {
+.error, .empty {
   text-align: center;
   padding: 60px 0;
   color: #888;
   font-size: 14px;
 }
 
+/* ---- Hero ---- */
 .match-hero {
   margin-bottom: 20px;
-  padding: 16px 20px;
+  padding: 20px 24px;
   background: #1a1a1a;
-  border-radius: 12px;
+  border-radius: 16px;
   border: 1px solid #2a2a2a;
+  overflow: hidden;
+  position: relative;
 }
+
+.match-hero::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+}
+
+.hero--live {
+  background: linear-gradient(135deg, rgba(13,71,161,0.35), rgba(21,101,192,0.15) 50%, rgba(13,71,161,0.35));
+  border-color: rgba(79,195,247,0.25);
+}
+.hero--live::before { background: linear-gradient(90deg, #1565C0, #4fc3f7, #1565C0); }
+
+.hero--ht {
+  background: linear-gradient(135deg, rgba(230,162,60,0.12), rgba(230,162,60,0.04) 50%, rgba(230,162,60,0.12));
+  border-color: rgba(230,162,60,0.2);
+}
+.hero--ht::before { background: linear-gradient(90deg, #b8860b, #e6a23c, #b8860b); }
+
+.hero--ft::before { background: #444; }
 
 /* Top bar */
 .hero-top {
   display: flex; align-items: center; gap: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 .back-btn {
   cursor: pointer;
-  font-size: 13px; color: #4fc3f7;
+  font-size: 12px; font-weight: 600;
+  color: #4fc3f7;
+  background: rgba(79,195,247,0.1);
+  padding: 4px 12px;
+  border-radius: 16px;
   flex-shrink: 0;
+  transition: background 0.2s;
 }
-.back-btn:hover { opacity: 0.8; }
+.back-btn:hover { background: rgba(79,195,247,0.2); }
 .hero-league {
-  font-size: 14px; color: #aaa; font-weight: 500;
+  font-size: 13px; color: #aaa; font-weight: 500;
   flex: 1; text-align: center;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+}
+.hero-lpc {
+  width: 18px; height: 18px; object-fit: contain; border-radius: 4px;
 }
 .round {
   font-size: 12px; color: #666;
@@ -626,31 +680,74 @@ function getIncidentIcon(intp: string, incl?: string) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 16px;
+  gap: 20px;
+  margin-bottom: 20px;
 }
-.hero-team { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.hero-team { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .hero-home { text-align: center; }
 .hero-away { text-align: center; }
-.hero-logo { width: 48px; height: 48px; object-fit: contain; border-radius: 50%; background: #252525; }
-.hero-name { font-size: 14px; font-weight: 600; color: #ddd; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.hero-score { display: flex; flex-direction: column; align-items: center; gap: 2px; flex-shrink: 0; }
-.hero-score-main { font-size: 28px; font-weight: 800; color: #fff; letter-spacing: 2px; font-variant-numeric: tabular-nums; }
-.hero-score-sub { font-size: 13px; color: #666; }
-.hero-status { font-size: 13px; font-weight: 600; color: #888; margin-top: 2px; }
-.hero-status.live { color: #4fc3f7; animation: pulse 1.5s ease-in-out infinite; }
-.hero-status.ht { color: #e6a23c; }
+.hero-logo-wrap {
+  width: 72px; height: 72px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.06);
+  display: flex; align-items: center; justify-content: center;
+  border: 2px solid rgba(255,255,255,0.1);
+}
+.hero-logo { width: 52px; height: 52px; object-fit: contain; }
+.hero-name { font-size: 15px; font-weight: 700; color: #e0e0e0; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hero-score { display: flex; flex-direction: column; align-items: center; gap: 4px; flex-shrink: 0; }
+.hero-score-main { font-size: 42px; font-weight: 900; color: #fff; letter-spacing: 3px; font-variant-numeric: tabular-nums; line-height: 1; }
+.hero-score-sub { font-size: 14px; color: rgba(255,255,255,0.4); }
+.hero-status { font-size: 14px; font-weight: 700; color: #888; margin-top: 4px; padding: 2px 14px; border-radius: 12px; }
+.hero-status.live { color: #fff; background: #4fc3f7; animation: pulse-ring 2s ease-in-out infinite; }
+.hero-status.ht { color: #fff; background: #e6a23c; }
 
-/* Info strip */
+/* Info strip chips */
 .hero-info-strip {
   display: flex; justify-content: center; align-items: center; gap: 8px;
-  padding-top: 12px;
-  border-top: 1px solid #2a2a2a;
+  flex-wrap: wrap;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255,255,255,0.08);
 }
-.hi-item { font-size: 12px; color: #aaa; }
-.hi-sep { font-size: 12px; color: #444; }
+.hi-chip {
+  font-size: 12px; color: #aaa;
+  background: rgba(255,255,255,0.05);
+  padding: 4px 12px;
+  border-radius: 12px;
+  white-space: nowrap;
+}
 
-@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+/* ---- Skeleton ---- */
+.skel-detail { display: flex; flex-direction: column; gap: 16px; }
+.skel-hero {
+  background: #1a1a1a; border-radius: 16px; padding: 24px;
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  border: 1px solid #2a2a2a;
+}
+.skel-line {
+  border-radius: 6px;
+  background: linear-gradient(90deg, #222 25%, #2a2a2a 50%, #222 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+.skel-lg { width: 180px; height: 14px; }
+.skel-xl { width: 120px; height: 36px; }
+.skel-md { width: 260px; height: 12px; }
+.skel-tabs { display: flex; gap: 12px; padding: 0 8px; }
+.skel-tab { width: 60px; height: 14px; }
+.skel-block { background: #1a1a1a; border-radius: 12px; padding: 16px; border: 1px solid #2a2a2a; display: flex; flex-direction: column; gap: 10px; }
+.skel-hd { width: 100px; height: 14px; }
+.skel-full { width: 100%; height: 12px; }
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes pulse-ring {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(79,195,247,0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(79,195,247,0); }
+}
 
 .detail-tabs { --el-tabs-header-height: 36px; }
 .detail-tabs :deep(.el-tabs__item) { color: #666; font-size: 13px; }
@@ -666,12 +763,35 @@ function getIncidentIcon(intp: string, incl?: string) {
 .info-label { color: #888; font-size: 12px; }
 
 .stats-bar-list { display: flex; flex-direction: column; gap: 16px; }
-.stats-group-name { font-size: 12px; color: #4fc3f7; margin-bottom: 8px; font-weight: 600; }
-.stats-bar-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
-.stats-name { flex: 1; text-align: center; font-size: 12px; color: #aaa; }
-.stats-home { text-align: right; min-width: 30px; }
-.stats-away { text-align: left; min-width: 30px; }
-.stats-val { font-size: 13px; color: #ddd; font-weight: 600; }
+.stats-group-name { font-size: 12px; color: #4fc3f7; margin-bottom: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.stats-bar-row { display: flex; align-items: center; gap: 10px; padding: 3px 0; }
+.stats-val {
+  font-size: 14px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  min-width: 36px; flex-shrink: 0;
+}
+.stats-home { text-align: right; color: #64b5f6; }
+.stats-away { text-align: left; color: #ef5350; }
+
+.stats-bar-track {
+  flex: 1; height: 6px;
+  background: #2a2a2a; border-radius: 3px;
+  display: flex; overflow: hidden;
+  gap: 2px;
+}
+.stats-bar-home {
+  height: 100%;
+  background: linear-gradient(90deg, #1565C0, #42a5f5);
+  border-radius: 3px;
+  margin-left: auto;
+  transition: width 0.6s ease;
+}
+.stats-bar-away {
+  height: 100%;
+  background: linear-gradient(90deg, #ef5350, #c62828);
+  border-radius: 3px;
+  transition: width 0.6s ease;
+}
 
 .timeline { position: relative; padding: 12px 0; }
 .timeline::before {
@@ -689,19 +809,20 @@ function getIncidentIcon(intp: string, incl?: string) {
 .tl-home { align-items: flex-end; }
 .tl-away { align-items: flex-start; }
 
-/* Hollow dot */
+/* Timeline dot - filled with event color */
 .tl-marker {
   position: relative;
   display: flex; flex-direction: column; align-items: center;
-  min-width: 32px; padding: 6px 0; z-index: 1;
+  min-width: 36px; padding: 4px 0; z-index: 1;
 }
 .tl-dot {
-  width: 10px; height: 10px;
+  width: 12px; height: 12px;
   border-radius: 50%;
   border: 2px solid #4fc3f7;
-  background: #1a1a1a;
+  background: #4fc3f7;
   flex-shrink: 0;
   margin-top: 6px;
+  box-shadow: 0 0 6px rgba(79,195,247,0.3);
 }
 .tl-time-text {
   font-size: 11px; font-weight: 700; color: #4fc3f7;
@@ -709,12 +830,14 @@ function getIncidentIcon(intp: string, incl?: string) {
   margin-top: 4px;
 }
 
-/* Bubble card */
+/* Bubble card with glass effect */
 .tl-bubble {
   display: flex; align-items: center; gap: 10px;
   padding: 10px 14px;
-  background: #1e1e1e;
-  border: 1px solid #2a2a2a;
+  background: rgba(30,30,30,0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,0.08);
   border-radius: 10px;
   max-width: 280px;
   position: relative;
@@ -829,11 +952,21 @@ function getIncidentIcon(intp: string, incl?: string) {
 .h2h-th-seas { width: 65px; }
 .h2h-th-result { text-align: center; width: 80px; }
 
-.h2h-tr { transition: background 0.15s; cursor: pointer; }
-.h2h-tr:hover { background: rgba(79,195,247,0.06); }
+.h2h-tr { transition: all 0.15s; cursor: pointer; }
+.h2h-tr:nth-child(even) { background: rgba(255,255,255,0.02); }
+.h2h-tr:hover { background: rgba(79,195,247,0.08); }
+.h2h-tr:active { transform: scale(0.995); }
 .h2h-td {
-  padding: 9px 10px; border-bottom: 1px solid #1a1a1a;
+  padding: 10px 12px; border-bottom: 1px solid #1a1a1a;
   color: #ddd; white-space: nowrap;
+}
+.h2h-td:first-child { border-radius: 6px 0 0 6px; }
+.h2h-td:last-child { border-radius: 0 6px 6px 0; }
+.h2h-tr:hover .h2h-td:last-child::after {
+  content: " ›";
+  color: #4fc3f7;
+  font-size: 16px;
+  font-weight: 700;
 }
 .h2h-td-date { color: #aaa; font-size: 12px; }
 .h2h-td-tour { color: #888; font-size: 12px; max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
@@ -901,27 +1034,39 @@ function getIncidentIcon(intp: string, incl?: string) {
 </style>
 
 <style>
-html:not(.dark) .detail-page .loading,
 html:not(.dark) .detail-page .error,
 html:not(.dark) .detail-page .empty { color: #999; }
 
+/* Light hero */
 html:not(.dark) .match-hero {
   background: #fff;
   border-color: #e0e0e0;
 }
-html:not(.dark) .hero-top { border-color: #eee; }
+html:not(.dark) .hero--live {
+  background: linear-gradient(135deg, rgba(13,140,196,0.08), rgba(13,140,196,0.02) 50%, rgba(13,140,196,0.08));
+  border-color: rgba(13,140,196,0.15);
+}
+html:not(.dark) .hero--ht {
+  background: linear-gradient(135deg, rgba(230,162,60,0.08), rgba(230,162,60,0.02) 50%, rgba(230,162,60,0.08));
+  border-color: rgba(230,162,60,0.15);
+}
 html:not(.dark) .hero-league { color: #666; }
 html:not(.dark) .round { color: #999; }
-html:not(.dark) .hero-logo { background: #f0f0f0; }
+html:not(.dark) .hero-logo-wrap { background: #f5f5f5; border-color: #e8e8e8; }
 html:not(.dark) .hero-name { color: #333; }
 html:not(.dark) .hero-score-main { color: #222; }
-html:not(.dark) .hero-score-sub { color: #999; }
+html:not(.dark) .hero-score-sub { color: #aaa; }
 html:not(.dark) .hero-status { color: #666; }
-html:not(.dark) .hero-status.live { color: #0d8cc4; }
-html:not(.dark) .hero-status.ht { color: #e6a23c; }
+html:not(.dark) .hero-status.live { color: #fff; background: #0d8cc4; }
+html:not(.dark) .hero-status.ht { color: #fff; background: #e6a23c; }
 html:not(.dark) .hero-info-strip { border-top-color: #eee; }
-html:not(.dark) .hi-item { color: #666; }
-html:not(.dark) .hi-sep { color: #ccc; }
+html:not(.dark) .hi-chip {
+  color: #666; background: #f0f0f0;
+}
+html:not(.dark) .back-btn {
+  background: rgba(13,140,196,0.08);
+  color: #0d8cc4;
+}
 
 html:not(.dark) .section-title {
   color: #666;
@@ -936,20 +1081,32 @@ html:not(.dark) .info-item {
 html:not(.dark) .info-label { color: #999; }
 
 html:not(.dark) .stats-group-name { color: #0d8cc4; }
-html:not(.dark) .stats-name { color: #666; }
-html:not(.dark) .stats-val { color: #333; }
+html:not(.dark) .stats-home { color: #1565C0; }
+html:not(.dark) .stats-away { color: #c62828; }
+html:not(.dark) .stats-bar-track { background: #e8e8e8; }
+
+/* Light skeleton */
+html:not(.dark) .skel-hero,
+html:not(.dark) .skel-block { background: #fff; border-color: #e8e8e8; }
+html:not(.dark) .skel-line {
+  background: linear-gradient(90deg, #eee 25%, #f0f0f0 50%, #eee 75%);
+  background-size: 200% 100%;
+}
 
 html:not(.dark) .timeline::before { background: #e0e0e0; }
 html:not(.dark) .tl-dot {
-  background: #fafafa;
+  background: #0d8cc4;
   border-color: #0d8cc4;
+  box-shadow: 0 0 4px rgba(13,140,196,0.25);
 }
 html:not(.dark) .tl-bubble {
-  background: #fafafa;
-  border-color: #e0e0e0;
+  background: rgba(250,250,250,0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-color: rgba(0,0,0,0.08);
 }
-html:not(.dark) .tl-home .tl-bubble::after { border-left-color: #e0e0e0; }
-html:not(.dark) .tl-away .tl-bubble::before { border-right-color: #e0e0e0; }
+html:not(.dark) .tl-home .tl-bubble::after { border-left-color: rgba(0,0,0,0.08); }
+html:not(.dark) .tl-away .tl-bubble::before { border-right-color: rgba(0,0,0,0.08); }
 html:not(.dark) .tl-player { color: #333; }
 html:not(.dark) .tl-desc { color: #999; }
 html:not(.dark) .tl-period-score { color: #333; }
@@ -966,13 +1123,14 @@ html:not(.dark) .h2h-table thead th {
 html:not(.dark) .h2h-td {
   color: #333; border-bottom-color: #eee;
 }
+html:not(.dark) .h2h-tr:nth-child(even) { background: rgba(0,0,0,0.015); }
+html:not(.dark) .h2h-tr:hover { background: rgba(13,140,196,0.05); }
 html:not(.dark) .h2h-td-date { color: #666; }
 html:not(.dark) .h2h-td-tour { color: #888; }
 html:not(.dark) .h2h-score-ft { color: #222; }
 html:not(.dark) .h2h-score-ht { color: #999; }
 html:not(.dark) .h2h-td-seas { color: #999; }
 html:not(.dark) .h2h-result { background: #f0f0f0; color: #888; }
-html:not(.dark) .h2h-tr:hover { background: rgba(13,140,196,0.04); }
 
 html:not(.dark) .lh-name { color: #333; }
 

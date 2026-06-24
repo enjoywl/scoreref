@@ -185,7 +185,17 @@ function getMatchTime(m: MatchData) {
       <span class="count">{{ t('count', { n: matches.length }) }}</span>
     </div>
 
-    <div v-if="loading" class="loading">{{ t('loading') }}</div>
+    <!-- Skeleton loading -->
+    <div v-if="loading" class="skel-list">
+      <div v-for="i in 6" :key="'sk'+i" class="skel-card">
+        <div class="skel-row">
+          <div class="skel-line skel-time"></div>
+          <div class="skel-line skel-team"></div>
+          <div class="skel-line skel-score"></div>
+          <div class="skel-line skel-team"></div>
+        </div>
+      </div>
+    </div>
     <div v-else-if="error" class="error">{{ t('error') }}: {{ error }}</div>
 
     <template v-else>
@@ -203,11 +213,16 @@ function getMatchTime(m: MatchData) {
       </h2>
 
       <div class="match-list">
-        <div v-for="m in list" :key="m.mid" class="match-card" @click="goDetail(m.mid)">
+        <div
+          v-for="m in list"
+          :key="m.mid"
+          :class="['match-card', 'match-card--' + (statusCls[m.stat] || 'def')]"
+          @click="goDetail(m.mid)"
+        >
           <div class="match-body">
             <div class="match-meta">
               <span class="kickoff-time">{{ formatKickoff(m.mtim) }}</span>
-              <span :class="['match-status', statusCls[m.stat]]">{{ getMatchTime(m) }}</span>
+              <span :class="['match-status-badge', statusCls[m.stat]]">{{ getMatchTime(m) }}</span>
             </div>
 
             <div class="team team-left">
@@ -217,7 +232,7 @@ function getMatchTime(m: MatchData) {
 
             <div class="score">
               <span class="score-main">{{ m.hscr }} - {{ m.ascr }}</span>
-              <span class="score-ht">({{ m.hhsc }} - {{ m.ahsc }})</span>
+              <span class="score-ht" v-if="m.stat >= 2">({{ m.hhsc }} - {{ m.ahsc }})</span>
             </div>
 
             <div class="team team-right">
@@ -478,26 +493,37 @@ function getMatchTime(m: MatchData) {
 .match-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .match-card {
   background: #1a1a1a;
-  border-radius: 8px;
-  padding: 10px 14px;
+  border-radius: 10px;
+  padding: 12px 16px;
   border: 1px solid #2a2a2a;
-  transition: border-color 0.2s;
+  border-left: 4px solid #2a2a2a;
+  transition: all 0.2s ease;
+  cursor: pointer;
 }
+
+.match-card--live { border-left-color: #4fc3f7; }
+.match-card--ht   { border-left-color: #e6a23c; }
+.match-card--ft   { border-left-color: #555; }
+.match-card--def  { border-left-color: #2a2a2a; }
 
 .match-card:hover {
   border-color: #444;
+  transform: translateX(3px);
 }
+
+.match-card--live:hover { border-left-color: #4fc3f7; }
+.match-card--ht:hover   { border-left-color: #e6a23c; }
 
 .match-meta {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 2px;
+  gap: 4px;
   flex-shrink: 0;
   min-width: 55px;
 }
@@ -508,24 +534,34 @@ function getMatchTime(m: MatchData) {
   font-variant-numeric: tabular-nums;
 }
 
-.match-status {
-  font-size: 12px;
-  font-weight: 600;
+.match-status-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
   color: #888;
+  background: rgba(255,255,255,0.05);
 }
 
-.match-status.live {
-  color: #4fc3f7;
-  animation: pulse 1.5s ease-in-out infinite;
+.match-status-badge.live {
+  color: #fff;
+  background: #4fc3f7;
+  animation: pulse-ring 2s ease-in-out infinite;
 }
 
-.match-status.ht {
-  color: #e6a23c;
+.match-status-badge.ht {
+  color: #fff;
+  background: #e6a23c;
 }
 
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+@keyframes pulse-ring {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(79,195,247,0.4); }
+  50% { box-shadow: 0 0 0 6px rgba(79,195,247,0); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
 }
 
 .match-body {
@@ -553,8 +589,8 @@ function getMatchTime(m: MatchData) {
 }
 
 .team-logo {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   object-fit: contain;
   border-radius: 50%;
   background: #252525;
@@ -562,24 +598,28 @@ function getMatchTime(m: MatchData) {
 }
 
 .team-name {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   color: #ddd;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .score {
   display: flex;
   flex-direction: column;
   align-items: center;
-  min-width: 65px;
+  min-width: 70px;
   flex-shrink: 0;
 }
 
 .score-main {
-  font-size: 18px;
-  font-weight: 700;
+  font-size: 20px;
+  font-weight: 800;
   color: #fff;
-  letter-spacing: 1px;
+  letter-spacing: 2px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -589,12 +629,34 @@ function getMatchTime(m: MatchData) {
   margin-top: -2px;
 }
 
-.loading {
-  text-align: center;
-  padding: 60px 0;
-  color: #888;
-  font-size: 16px;
+/* Skeleton loading */
+.skel-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
+.skel-card {
+  background: #1a1a1a;
+  border-radius: 10px;
+  padding: 14px 16px;
+  border: 1px solid #2a2a2a;
+}
+.skel-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.skel-line {
+  height: 16px;
+  border-radius: 8px;
+  background: linear-gradient(90deg, #222 25%, #2a2a2a 50%, #222 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+.skel-time { width: 40px; }
+.skel-team { flex: 1; max-width: 120px; }
+.skel-score { width: 60px; }
 
 .error {
   text-align: center;
@@ -615,23 +677,23 @@ function getMatchTime(m: MatchData) {
 
   .team-name {
     font-size: 11px;
-    max-width: 80px;
+    max-width: 70px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .score-main {
-    font-size: 16px;
+    font-size: 17px;
   }
 
   .team-logo {
-    width: 20px;
-    height: 20px;
+    width: 22px;
+    height: 22px;
   }
 
   .match-card {
-    padding: 8px 10px;
+    padding: 10px 12px;
   }
 }
 </style>
@@ -644,10 +706,27 @@ html:not(.dark) .group-title {
 html:not(.dark) .match-card {
   background: #fff;
   border-color: #e8e8e8;
+  border-left-color: #e8e8e8;
 }
+html:not(.dark) .match-card--live { border-left-color: #0d8cc4; }
+html:not(.dark) .match-card--ht   { border-left-color: #e6a23c; }
+html:not(.dark) .match-card--ft   { border-left-color: #ccc; }
 
 html:not(.dark) .match-card:hover {
   border-color: #bbb;
+}
+
+html:not(.dark) .match-status-badge {
+  background: #eee;
+  color: #888;
+}
+html:not(.dark) .match-status-badge.live {
+  background: #0d8cc4;
+  color: #fff;
+}
+html:not(.dark) .match-status-badge.ht {
+  background: #e6a23c;
+  color: #fff;
 }
 
 html:not(.dark) .toolbar {
@@ -704,18 +783,6 @@ html:not(.dark) .kickoff-time {
   color: #666;
 }
 
-html:not(.dark) .match-status {
-  color: #666;
-}
-
-html:not(.dark) .match-status.live {
-  color: #0d8cc4;
-}
-
-html:not(.dark) .match-status.ht {
-  color: #e6a23c;
-}
-
 html:not(.dark) .team-name {
   color: #333;
 }
@@ -732,7 +799,16 @@ html:not(.dark) .score-ht {
   color: #999;
 }
 
-html:not(.dark) .loading {
-  color: #999;
+html:not(.dark) .skel-card {
+  background: #fafafa;
+  border-color: #e8e8e8;
+}
+html:not(.dark) .skel-line {
+  background: linear-gradient(90deg, #eee 25%, #f0f0f0 50%, #eee 75%);
+  background-size: 200% 100%;
+}
+
+html:not(.dark) .error {
+  color: #e53935;
 }
 </style>

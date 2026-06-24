@@ -119,6 +119,14 @@ html.dark .footer {
 .banner {
   background: #0f0f0f;
   padding: 12px 16px 0;
+  position: relative;
+}
+.banner::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #1565C0, #4fc3f7, #1565C0);
 }
 
 .banner-content {
@@ -151,8 +159,11 @@ html.dark .footer {
 .logo-text {
   font-size: 16px;
   font-weight: 800;
-  color: #fff;
   letter-spacing: 3px;
+  background: linear-gradient(135deg, #4fc3f7, #81d4fa);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .sport-tabs {
@@ -225,9 +236,15 @@ html.dark .footer {
 html:not(.dark) .banner {
   background: #f5f5f5;
 }
+html:not(.dark) .banner::before {
+  background: linear-gradient(90deg, #0d8cc4, #4fc3f7, #0d8cc4);
+}
 
 html:not(.dark) .logo-text {
-  color: #333;
+  background: linear-gradient(135deg, #0d8cc4, #4fc3f7);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 html:not(.dark) .sport-tabs .el-tabs__item {
