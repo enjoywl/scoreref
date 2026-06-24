@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useI18n } from "../locales";
 
 interface MatchData {
@@ -54,17 +54,27 @@ function formatKickoff(ts: number) {
 export default function MatchList() {
   const { t } = useI18n();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [matches, setMatches] = useState<MatchData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [groupBy, setGroupBy] = useState<"league" | "country">("league");
-  const [statusFilter, setStatusFilter] = useState("1");
-  const [dateOptions, setDateOptions] = useState(() => buildDateOptions(t));
-  const [selectedDate, setSelectedDate] = useState(dateOptions[6].value);
 
-  useEffect(() => {
-    setDateOptions(buildDateOptions(t));
-  }, [t]);
+  const dateOptions = useMemo(() => buildDateOptions(t), [t]);
+  const today = dateOptions[6]?.value || new Date().toISOString().slice(0, 10);
+
+  const groupBy = (searchParams.get("groupBy") as "league" | "country") || "league";
+  const statusFilter = searchParams.get("status") ?? "1";
+  const selectedDate = searchParams.get("date") || today;
+
+  function setGroupBy(val: "league" | "country") {
+    setSearchParams(prev => { prev.set("groupBy", val); return prev; });
+  }
+  function setStatusFilter(val: string) {
+    setSearchParams(prev => { if (val) prev.set("status", val); else prev.delete("status"); return prev; });
+  }
+  function setSelectedDate(val: string) {
+    setSearchParams(prev => { if (val !== today) prev.set("date", val); else prev.delete("date"); return prev; });
+  }
 
   const fetchMatches = useCallback(async () => {
     setLoading(true);
@@ -72,7 +82,7 @@ export default function MatchList() {
     try {
       const params = new URLSearchParams({ date: selectedDate });
       if (statusFilter) params.set("status", statusFilter);
-      const res = await fetch(`/api/matches?${params}`);
+      const res = await fetch(`/api/matches?${params}`, { cache: "no-cache" });
       const json = await res.json();
       if (json.code === 200) {
         setMatches(json.data);
@@ -158,8 +168,8 @@ export default function MatchList() {
       </div>
 
       {/* Toolbar */}
-      <div className="flex items-center justify-between mb-5 pb-3 border-b border-border">
-        <div className="flex items-center gap-4">
+      <div className="flex items-center justify-between mb-5 pb-3 border-b border-border gap-2 flex-wrap">
+        <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
           <select
             value={groupBy}
             onChange={(e) => setGroupBy(e.target.value as "league" | "country")}
@@ -230,12 +240,12 @@ export default function MatchList() {
                 onClick={() => navigate(`/match/${m.mid}`)}
                 className={`bg-surface rounded-[10px] py-3 px-4 border border-border-light border-l-4 ${borderColor[statusCls[m.stat]] || borderColor.def} hover:border-[#444] hover:translate-x-[3px] transition-all cursor-pointer`}
               >
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center justify-between gap-1.5 sm:gap-3">
                   {/* Meta */}
-                  <div className="flex flex-col items-end gap-1 shrink-0 min-w-[55px]">
-                    <span className="text-xs text-text-secondary tabular-nums">{formatKickoff(m.mtim)}</span>
+                  <div className="flex flex-col items-end gap-1 shrink-0 min-w-[42px] sm:min-w-[55px]">
+                    <span className="text-[11px] sm:text-xs text-text-secondary tabular-nums">{formatKickoff(m.mtim)}</span>
                     <span
-                      className={`text-[11px] font-bold px-2 py-0.5 rounded-[10px]
+                      className={`text-[10px] sm:text-[11px] font-bold px-1.5 sm:px-2 py-0.5 rounded-[10px]
                         ${m.stat === 1 ? "bg-accent text-white animate-pulse-ring" : ""}
                         ${m.stat === 2 ? "bg-[#e6a23c] text-white" : ""}
                         ${m.stat === 0 ? "bg-surface-alt text-text-muted" : ""}
@@ -247,23 +257,23 @@ export default function MatchList() {
                   </div>
 
                   {/* Home team */}
-                  <div className="flex-1 flex items-center justify-end gap-2.5 text-right">
-                    <img src={m.hpc} alt={m.hnam} className="w-7 h-7 object-contain rounded-full bg-surface-alt shrink-0" loading="lazy" />
-                    <span className="text-[13px] font-medium text-text-primary max-w-[140px] truncate">{m.hnam}</span>
+                  <div className="flex-1 flex items-center justify-end gap-1.5 sm:gap-2.5 text-right min-w-0">
+                    <img src={m.hpc} alt={m.hnam} className="w-6 h-6 sm:w-7 sm:h-7 object-contain rounded-full bg-surface-alt shrink-0" loading="lazy" />
+                    <span className="text-[12px] sm:text-[13px] font-medium text-text-primary max-w-[100px] sm:max-w-[140px] truncate">{m.hnam}</span>
                   </div>
 
                   {/* Score */}
-                  <div className="flex flex-col items-center min-w-[70px] shrink-0">
-                    <span className="text-xl font-extrabold text-text-primary tracking-[2px] tabular-nums">{m.hscr} - {m.ascr}</span>
+                  <div className="flex flex-col items-center min-w-[60px] sm:min-w-[70px] shrink-0">
+                    <span className="text-lg sm:text-xl font-extrabold text-text-primary tracking-[2px] tabular-nums">{m.hscr} - {m.ascr}</span>
                     {m.stat >= 2 && (
-                      <span className="text-[11px] text-text-muted -mt-0.5">({m.hhsc} - {m.ahsc})</span>
+                      <span className="text-[10px] sm:text-[11px] text-text-muted -mt-0.5">({m.hhsc} - {m.ahsc})</span>
                     )}
                   </div>
 
                   {/* Away team */}
-                  <div className="flex-1 flex items-center gap-2.5">
-                    <img src={m.apc} alt={m.anam} className="w-7 h-7 object-contain rounded-full bg-surface-alt shrink-0" loading="lazy" />
-                    <span className="text-[13px] font-medium text-text-primary max-w-[140px] truncate">{m.anam}</span>
+                  <div className="flex-1 flex items-center gap-1.5 sm:gap-2.5 min-w-0">
+                    <img src={m.apc} alt={m.anam} className="w-6 h-6 sm:w-7 sm:h-7 object-contain rounded-full bg-surface-alt shrink-0" loading="lazy" />
+                    <span className="text-[12px] sm:text-[13px] font-medium text-text-primary max-w-[100px] sm:max-w-[140px] truncate">{m.anam}</span>
                   </div>
                 </div>
               </div>

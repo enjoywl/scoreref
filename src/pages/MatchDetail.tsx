@@ -128,7 +128,7 @@ export default function MatchDetail() {
   const loadMatchData = useCallback(async (matchId: string) => {
     setLoading(true);
     setActiveTab("live");
-    const res = await fetch(`/api/match/${matchId}/full`);
+    const res = await fetch(`/api/match/${matchId}/full`, { cache: "no-cache" });
     const json = await res.json();
     if (json.code === 200 && json.data) {
       const d = json.data;
@@ -178,10 +178,10 @@ export default function MatchDetail() {
       {/* Skeleton */}
       {loading && (
         <div className="flex flex-col gap-4">
-          <div className="bg-surface rounded-2xl p-6 border border-border flex flex-col items-center gap-3">
-            <div className="w-[180px] h-3.5 rounded-md animate-pulse bg-gradient-to-r from-skeleton-from via-skeleton-via to-skeleton-to bg-[length:200%_100%]" />
-            <div className="w-[120px] h-9 rounded-md animate-pulse bg-gradient-to-r from-skeleton-from via-skeleton-via to-skeleton-to bg-[length:200%_100%]" />
-            <div className="w-[260px] h-3 rounded-md animate-pulse bg-gradient-to-r from-skeleton-from via-skeleton-via to-skeleton-to bg-[length:200%_100%]" />
+          <div className="bg-surface rounded-2xl p-4 sm:p-6 border border-border flex flex-col items-center gap-3">
+            <div className="w-[140px] sm:w-[180px] h-3.5 rounded-md animate-pulse bg-gradient-to-r from-skeleton-from via-skeleton-via to-skeleton-to bg-[length:200%_100%]" />
+            <div className="w-[100px] sm:w-[120px] h-8 sm:h-9 rounded-md animate-pulse bg-gradient-to-r from-skeleton-from via-skeleton-via to-skeleton-to bg-[length:200%_100%]" />
+            <div className="w-[200px] sm:w-[260px] h-3 rounded-md animate-pulse bg-gradient-to-r from-skeleton-from via-skeleton-via to-skeleton-to bg-[length:200%_100%]" />
           </div>
           {[1, 2, 3].map(i => (
             <div key={i} className="bg-surface rounded-xl p-4 border border-border flex flex-col gap-2.5">
@@ -207,7 +207,7 @@ export default function MatchDetail() {
             {/* Top bar */}
             <div className="flex items-center gap-3 mb-5">
               <button
-                onClick={() => navigate(-1)}
+                onClick={() => (window.history.length > 1 ? navigate(-1) : navigate("/"))}
                 className="text-xs font-semibold text-accent bg-accent/8 dark:bg-accent/10 px-3 py-1 rounded-2xl hover:bg-accent/20 transition-colors cursor-pointer"
               >
                 &larr; Back
@@ -220,17 +220,17 @@ export default function MatchDetail() {
             </div>
 
             {/* Teams + score */}
-            <div className="flex items-center justify-between gap-5 mb-5">
-              <div className="flex-1 flex flex-col items-center gap-2.5 text-center">
-                <div className="w-[72px] h-[72px] rounded-full bg-[#f5f5f5] dark:bg-white/5 border-2 border-[#e8e8e8] dark:border-white/10 flex items-center justify-center">
-                  <img src={info.hpc} alt={info.hnam} className="w-[52px] h-[52px] object-contain" />
+            <div className="flex items-center justify-between gap-3 sm:gap-5 mb-5">
+              <div className="flex-1 flex flex-col items-center gap-2 sm:gap-2.5 text-center min-w-0">
+                <div className="w-[56px] h-[56px] sm:w-[72px] sm:h-[72px] rounded-full bg-[#f5f5f5] dark:bg-white/5 border-2 border-[#e8e8e8] dark:border-white/10 flex items-center justify-center">
+                  <img src={info.hpc} alt={info.hnam} className="w-[40px] h-[40px] sm:w-[52px] sm:h-[52px] object-contain" />
                 </div>
-                <span className="text-[15px] font-bold text-text-primary max-w-[180px] truncate">{info.hnam}</span>
+                <span className="text-[13px] sm:text-[15px] font-bold text-text-primary max-w-[100px] sm:max-w-[180px] truncate">{info.hnam}</span>
               </div>
-              <div className="flex flex-col items-center gap-1 shrink-0">
-                <span className="text-[42px] font-black text-text-primary tracking-[3px] tabular-nums leading-none">{info.hscr} - {info.ascr}</span>
-                {info.stat >= 2 && <span className="text-sm text-text-muted dark:text-white/40">({info.hhsc} - {info.ahsc})</span>}
-                <span className={`text-sm font-bold mt-1 px-3.5 py-0.5 rounded-xl
+              <div className="flex flex-col items-center gap-0.5 sm:gap-1 shrink-0">
+                <span className="text-[32px] sm:text-[42px] font-black text-text-primary tracking-[2px] sm:tracking-[3px] tabular-nums leading-none">{info.hscr} - {info.ascr}</span>
+                {info.stat >= 2 && <span className="text-xs sm:text-sm text-text-muted dark:text-white/40">({info.hhsc} - {info.ahsc})</span>}
+                <span className={`text-xs sm:text-sm font-bold mt-0.5 sm:mt-1 px-2.5 sm:px-3.5 py-0.5 rounded-xl
                   ${info.stat === 1 ? "text-white bg-accent animate-pulse-ring" : ""}
                   ${info.stat === 2 ? "text-white bg-[#e6a23c]" : ""}
                   ${info.stat >= 3 ? "text-text-muted bg-surface-alt" : ""}`}
@@ -238,11 +238,11 @@ export default function MatchDetail() {
                   {matchTime}
                 </span>
               </div>
-              <div className="flex-1 flex flex-col items-center gap-2.5 text-center">
-                <div className="w-[72px] h-[72px] rounded-full bg-[#f5f5f5] dark:bg-white/5 border-2 border-[#e8e8e8] dark:border-white/10 flex items-center justify-center">
-                  <img src={info.apc} alt={info.anam} className="w-[52px] h-[52px] object-contain" />
+              <div className="flex-1 flex flex-col items-center gap-2 sm:gap-2.5 text-center min-w-0">
+                <div className="w-[56px] h-[56px] sm:w-[72px] sm:h-[72px] rounded-full bg-[#f5f5f5] dark:bg-white/5 border-2 border-[#e8e8e8] dark:border-white/10 flex items-center justify-center">
+                  <img src={info.apc} alt={info.anam} className="w-[40px] h-[40px] sm:w-[52px] sm:h-[52px] object-contain" />
                 </div>
-                <span className="text-[15px] font-bold text-text-primary max-w-[180px] truncate">{info.anam}</span>
+                <span className="text-[13px] sm:text-[15px] font-bold text-text-primary max-w-[100px] sm:max-w-[180px] truncate">{info.anam}</span>
               </div>
             </div>
 
@@ -367,7 +367,7 @@ export default function MatchDetail() {
                       return (
                         <div key={idx} className="flex items-start mb-1">
                           {/* Home side */}
-                          <div className="flex-1 flex flex-col items-end px-5">
+                          <div className="flex-1 flex flex-col items-end px-2 sm:px-5">
                             {ev.ihom === true && (
                               <div className={`flex items-center gap-2.5 py-2.5 px-3.5 bg-surface-elevated/85 backdrop-blur-lg border border-black/8 dark:border-white/8 rounded-[10px] max-w-[280px] relative border-l-3 ${barSideHome}`}>
                                 {ico.icon && <span className="text-base shrink-0">{ico.icon}</span>}
@@ -409,7 +409,7 @@ export default function MatchDetail() {
                           </div>
 
                           {/* Away side */}
-                          <div className="flex-1 flex flex-col items-start px-5">
+                          <div className="flex-1 flex flex-col items-start px-2 sm:px-5">
                             {ev.ihom === false && (
                               <div className={`flex items-center gap-2.5 py-2.5 px-3.5 bg-surface-elevated/85 backdrop-blur-lg border border-black/8 dark:border-white/8 rounded-[10px] max-w-[280px] relative ${barSideAway}`}>
                                 <div className="flex flex-col gap-0.5 text-left">
@@ -530,7 +530,7 @@ export default function MatchDetail() {
                 </div>
 
                 {/* Substitutes */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <div className="text-xs text-text-secondary font-semibold mb-1.5">{info.hnam} — Substitutes</div>
                     <div className="flex flex-wrap gap-1 p-2 bg-surface rounded-md">

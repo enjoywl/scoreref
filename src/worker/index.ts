@@ -8,7 +8,6 @@ type Env = {
 
 const app = new Hono<{ Bindings: Env }>();
 
-const CACHE_TTL = 30;
 const BASE = "http://106.42.192.93:8090";
 
 const MATCH_LIST_FIELDS = [
@@ -57,11 +56,18 @@ function isSuccess(json: any) {
   return json.code === 200 || json.code === 0;
 }
 
+const EDGE_CACHE_TTL = 30;
+
 async function cachedProxy(c: any, path: string, cacheKey: string, env: Env, pickFields?: readonly string[]) {
   const cache = caches.default;
   const ck = new Request(`https://cache.internal/${cacheKey}`);
   const cached = await cache.match(ck);
-  if (cached) return cached;
+  if (cached) {
+    // Strip cache headers from cached response so browser doesn't cache it
+    const resp = new Response(cached.body, cached);
+    resp.headers.set("Cache-Control", "no-store");
+    return resp;
+  }
 
   const json = await fetchFromOrigin(path, env);
   if (!json || !isSuccess(json)) {
@@ -72,10 +78,13 @@ async function cachedProxy(c: any, path: string, cacheKey: string, env: Env, pic
     json.data = stripFields(json.data, pickFields);
   }
 
-  const result = Response.json(json);
-  result.headers.set("Cache-Control", `public, max-age=${CACHE_TTL}`);
-  c.executionCtx.waitUntil(cache.put(ck, result.clone()));
-  return result;
+  // Cache API entry: allow edge cache for TTL
+  const cacheEntry = Response.json(json);
+  cacheEntry.headers.set("Cache-Control", `public, max-age=${EDGE_CACHE_TTL}`);
+  c.executionCtx.waitUntil(cache.put(ck, cacheEntry));
+
+  // Client response: prevent browser caching
+  return Response.json(json, { headers: { "Cache-Control": "no-store" } });
 }
 
 // --- Match list ---
@@ -124,7 +133,11 @@ app.get("/api/match/:mid/full", async (c) => {
   const cache = caches.default;
   const ck = new Request(`https://cache.internal/${cacheKey}`);
   const cached = await cache.match(ck);
-  if (cached) return cached;
+  if (cached) {
+    const resp = new Response(cached.body, cached);
+    resp.headers.set("Cache-Control", "no-store");
+    return resp;
+  }
 
   const [info, inc, ln, h2h, txt, st] = await Promise.all([
     fetchFromOrigin(`/v2/api/soccer/match/match-info?matchId=${mid}`, c.env),
@@ -148,11 +161,16 @@ app.get("/api/match/:mid/full", async (c) => {
     stats: extractStats(st),
   };
 
-  const result = new Response(JSON.stringify({ code: 200, data }), {
-    headers: { "Content-Type": "application/json", "Cache-Control": `public, max-age=${CACHE_TTL}` },
+  // Cache API entry: allow edge cache for TTL
+  const cacheEntry = new Response(JSON.stringify({ code: 200, data }), {
+    headers: { "Content-Type": "application/json", "Cache-Control": `public, max-age=${EDGE_CACHE_TTL}` },
   });
-  c.executionCtx.waitUntil(cache.put(ck, result.clone()));
-  return result;
+  c.executionCtx.waitUntil(cache.put(ck, cacheEntry));
+
+  // Client response: prevent browser caching
+  return new Response(JSON.stringify({ code: 200, data }), {
+    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+  });
 });
 
 function pickInfoFields(d: any) {

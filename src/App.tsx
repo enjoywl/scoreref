@@ -1,9 +1,11 @@
 import { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import AppRouter from "./router";
 import { useI18n } from "./locales";
 
 export default function App() {
   const { t, locale, setLocale } = useI18n();
+  const navigate = useNavigate();
   const [isDark, setIsDark] = useState(true);
 
   useEffect(() => {
@@ -56,6 +58,7 @@ export default function App() {
             {sports.map((s) => (
               <button
                 key={s.key}
+                onClick={() => navigate("/?status=1")}
                 className="text-[13px] font-semibold text-accent pb-2 border-b-2 border-accent h-9 leading-9 cursor-pointer"
               >
                 {s.label}

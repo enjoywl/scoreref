@@ -43,5 +43,9 @@ body {
   background: var(--color-app-bg);
   color: var(--color-text-primary);
   min-height: 100vh;
+  min-height: 100dvh;
   margin: 0;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
