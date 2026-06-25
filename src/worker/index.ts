@@ -135,14 +135,18 @@ async function fetchMatchesFromKV(date: string, status: string, env: Env) {
 
   if (matchesOnDate.length === 0) return [];
 
-  // Bulk-read match details (max BATCH_SIZE keys per batch, each batch = 1 KV op)
+  // Bulk-read match details in parallel batches
   const keys = matchesOnDate.map((m: any) => `${m.mid}:m`);
-  const details: any[] = [];
+  const batches: string[][] = [];
   for (let i = 0; i < keys.length; i += BATCH_SIZE) {
-    const batch = keys.slice(i, i + BATCH_SIZE);
-    const map = await kv.get(batch);
-    for (const key of batch) {
-      const raw = map.get(key);
+    batches.push(keys.slice(i, i + BATCH_SIZE));
+  }
+
+  const maps = await Promise.all(batches.map(batch => kv.get(batch)));
+  const details: any[] = [];
+  for (let i = 0; i < batches.length; i++) {
+    for (const key of batches[i]) {
+      const raw = maps[i].get(key);
       details.push(raw ? JSON.parse(raw) : null);
     }
   }
