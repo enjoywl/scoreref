@@ -419,19 +419,35 @@ async function runScheduled(_controller: ScheduledController, env: Env, _ctx: Ex
   const lists: Record<string, any[]> = {};
   const liveMids = new Set<string>();
 
-  // Fetch match lists for each date + status
-  for (const date of dates) {
-    for (const status of ["1", "0", "-1"]) {
-      const path = `/v2/api/soccer/match/by-status?date=${date}&status=${status}`;
-      const json = await fetchFromOrigin(path, env);
-      if (json && isSuccess(json) && Array.isArray(json.data)) {
-        const key = `${date}:${status}`;
-        lists[key] = stripFields(json.data, MATCH_LIST_FIELDS);
-        if (status === "1") {
-          for (const m of json.data) liveMids.add(m.mid);
-        }
-      }
+  // One fetch per date (no status filter), split by stat in code
+  const results = await Promise.allSettled(
+    dates.map(async (date) => {
+      const json = await fetchFromOrigin(`/v2/api/soccer/match/by-status?date=${date}`, env);
+      return { date, json };
+    })
+  );
+
+  for (const r of results) {
+    if (r.status !== "fulfilled" || !r.value) continue;
+    const { date, json } = r.value;
+    if (!json || !isSuccess(json) || !Array.isArray(json.data)) continue;
+
+    const stripped = stripFields(json.data, MATCH_LIST_FIELDS) as any[];
+
+    // Split by status: live(1), scheduled(0), finished(3,-1)
+    const live: typeof stripped = [];
+    const scheduled: typeof stripped = [];
+    const finished: typeof stripped = [];
+
+    for (const m of stripped) {
+      if (m.stat === 1) { live.push(m); liveMids.add(m.mid); }
+      else if (m.stat === 0) scheduled.push(m);
+      else finished.push(m); // stat 3 or -1
     }
+
+    if (live.length) lists[`${date}:1`] = live;
+    if (scheduled.length) lists[`${date}:0`] = scheduled;
+    if (finished.length) lists[`${date}:-1`] = finished;
   }
 
   // Fetch details for live matches (concurrent batches of 10)
