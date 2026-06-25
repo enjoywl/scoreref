@@ -1,6 +1,9 @@
 import { Hono } from "hono";
+import { ScorerefDO } from "./do";
+export { ScorerefDO };
 
 type Env = {
+  SCOREREF_DO?: DurableObjectNamespace;
   VPC_SERVICE?: {
     fetch: (url: string) => Promise<Response>;
   };
@@ -318,6 +321,21 @@ function pickInfoFields(d: any) {
   };
 }
 
+// --- DO proxy: WebSocket upgrade + HTTP fallback ---
+app.all("/do/*", async (c) => {
+  const doBinding = c.env.SCOREREF_DO;
+  if (!doBinding) {
+    return c.json({ code: 502, message: "Durable Object not available" }, 502);
+  }
+  const id = doBinding.idFromName("default");
+  const stub = doBinding.get(id);
+  // Rewrite /do/* → /*
+  const url = new URL(c.req.url);
+  url.pathname = url.pathname.replace(/^\/do/, "");
+  const req = new Request(url.toString(), c.req.raw);
+  return stub.fetch(req);
+});
+
 // --- Global error handler: keep API errors as JSON ---
 app.onError((err, c) => {
   console.error("Worker error", err.message);
@@ -336,3 +354,87 @@ app.notFound((c) => {
 });
 
 export default app;
+
+// --- Cron trigger: push match data to DO every 60s ---
+export async function scheduled(_controller: ScheduledController, env: Env, _ctx: ExecutionContext) {
+  const doBinding = env.SCOREREF_DO;
+  if (!doBinding) {
+    console.error("Cron: SCOREREF_DO binding not available");
+    return;
+  }
+
+  const id = doBinding.idFromName("default");
+  const stub = doBinding.get(id);
+
+  // 13-day window: today ± 6 days
+  const dates: string[] = [];
+  const now = new Date();
+  for (let i = -6; i <= 6; i++) {
+    const d = new Date(now);
+    d.setDate(d.getDate() + i);
+    dates.push(d.toISOString().slice(0, 10));
+  }
+
+  const lists: Record<string, any[]> = {};
+  const liveMids = new Set<string>();
+
+  // Fetch match lists for each date + status
+  for (const date of dates) {
+    for (const status of ["1", "0", "-1"]) {
+      const path = `/v2/api/soccer/match/by-status?date=${date}&status=${status}`;
+      const json = await fetchFromOrigin(path, env);
+      if (json && isSuccess(json) && Array.isArray(json.data)) {
+        const key = `${date}:${status}`;
+        lists[key] = stripFields(json.data, MATCH_LIST_FIELDS);
+        if (status === "1") {
+          for (const m of json.data) liveMids.add(m.mid);
+        }
+      }
+    }
+  }
+
+  // Fetch details for live matches (concurrent batches of 10)
+  const details: Record<string, any> = {};
+  const midArray = [...liveMids];
+  const BATCH = 10;
+  for (let i = 0; i < midArray.length; i += BATCH) {
+    const batch = midArray.slice(i, i + BATCH);
+    const results = await Promise.allSettled(
+      batch.map(async (mid) => {
+        const [info, inc] = await Promise.all([
+          fetchFromOrigin(`/v2/api/soccer/match/match-info?matchId=${mid}`, env),
+          fetchFromOrigin(`/v2/api/soccer/match/incidents?matchId=${mid}`, env),
+        ]);
+        if (info && isSuccess(info) && info.data) {
+          return {
+            mid,
+            detail: {
+              info: info.data,
+              incidents: inc && isSuccess(inc) ? inc.data?.incd || [] : [],
+            },
+          };
+        }
+        return null;
+      })
+    );
+    for (const r of results) {
+      if (r.status === "fulfilled" && r.value) {
+        details[r.value.mid] = r.value.detail;
+      }
+    }
+  }
+
+  // Push to DO
+  try {
+    const resp = await stub.fetch("https://do.internal/batch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lists, details }),
+    });
+    if (!resp.ok) {
+      console.error("Cron: DO batch push failed", resp.status);
+    }
+  } catch (err: any) {
+    console.error("Cron: DO batch push error", err.message);
+  }
+}

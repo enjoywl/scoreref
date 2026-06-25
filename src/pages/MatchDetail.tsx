@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useI18n } from "../locales";
+import { doClient } from "../lib/doClient";
 
 /* ---- Types ---- */
 interface MatchInfo {
@@ -134,7 +135,6 @@ export default function MatchDetail() {
   }
 
   const loadMatchData = useCallback(async (matchId: string) => {
-    setLoading(true);
     setActiveTab("live");
     setFetched({ commentary: false, stats: false, lineups: false, h2h: false });
     setCommentary([]);
@@ -142,12 +142,24 @@ export default function MatchDetail() {
     setLineups(null);
     setH2h([]);
 
-    const data = await fetchJSON(`/api/match/${matchId}/full`);
-    if (data) {
-      if (data.info) setInfo(data.info);
-      if (data.incidents) setIncidents(data.incidents);
+    // Try DO first (instant from memory or IndexedDB)
+    const doDetail = doClient.getDetail(matchId);
+    if (doDetail) {
+      setInfo(doDetail.info);
+      setIncidents(doDetail.incidents);
+      setLoading(false);
+    } else {
+      // Request from DO (WebSocket) or HTTP fallback
+      doClient.requestDetail(matchId);
+      // Also start HTTP as parallel fallback
+      setLoading(true);
+      const data = await fetchJSON(`/api/match/${matchId}/full`);
+      if (data) {
+        if (data.info) setInfo(data.info);
+        if (data.incidents) setIncidents(data.incidents);
+      }
+      setLoading(false);
     }
-    setLoading(false);
 
     // Load commentary + stats in background (needed for Live tab)
     fetchJSON(`/api/match/${matchId}/livetext`).then(d => {
@@ -195,6 +207,29 @@ export default function MatchDetail() {
   useEffect(() => {
     if (mid) loadMatchData(mid);
   }, [mid, loadMatchData]);
+
+  // Connect to DO and subscribe to live updates for this match
+  useEffect(() => {
+    doClient.start();
+  }, []);
+
+  useEffect(() => {
+    if (!mid) return;
+    const unsub = doClient.subscribe((state) => {
+      const detail = state.details[mid];
+      if (detail) {
+        setInfo((prev) => {
+          // Only update if scores or stat changed (avoid flicker on identical data)
+          if (!prev || prev.hscr !== detail.info.hscr || prev.ascr !== detail.info.ascr || prev.stat !== detail.info.stat) {
+            return detail.info;
+          }
+          return prev;
+        });
+        setIncidents(detail.incidents);
+      }
+    });
+    return unsub;
+  }, [mid]);
 
   const matchTime = useMemo(() => {
     if (!info) return "";

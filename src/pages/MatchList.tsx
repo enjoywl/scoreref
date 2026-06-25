@@ -1,25 +1,9 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useI18n } from "../locales";
+import { doClient, type MatchListItem } from "../lib/doClient";
 
-interface MatchData {
-  mid: string;
-  cty: string;
-  lnam: string;
-  lpc: string;
-  mtim: number;
-  stat: number;
-  hnam: string;
-  anam: string;
-  hscr: number;
-  ascr: number;
-  hhsc: number;
-  ahsc: number;
-  hpc: string;
-  apc: string;
-  seas: string;
-  locn?: string;
-}
+interface MatchData extends MatchListItem {}
 
 function getWeekday(day: number, t: (k: string) => string) {
   return t("weekdays." + day);
@@ -76,18 +60,23 @@ export default function MatchList() {
     setSearchParams(prev => { if (val !== today) prev.set("date", val); else prev.delete("date"); return prev; });
   }
 
+  // Try DO first, fallback to HTTP
   const fetchMatches = useCallback(async () => {
+    const doList = doClient.getList(selectedDate, statusFilter);
+    if (doList.length > 0) {
+      setMatches(doList);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams({ date: selectedDate });
-      params.set("status", statusFilter);
-      const res = await fetch(`/api/matches?${params}`);
-      const json = await res.json();
-      if (json.code === 200) {
-        setMatches(json.data);
+      const data = await doClient.fetchMatchesHTTP(selectedDate, statusFilter);
+      if (data.length > 0) {
+        setMatches(data);
       } else {
-        setError(json.message || "Failed to load");
+        setError("No matches found");
       }
     } catch (err: any) {
       setError(err.message);
@@ -99,6 +88,24 @@ export default function MatchList() {
   useEffect(() => {
     fetchMatches();
   }, [fetchMatches]);
+
+  // Connect to DO on mount
+  useEffect(() => {
+    doClient.start();
+  }, []);
+
+  // Subscribe to DO state updates for current filters
+  useEffect(() => {
+    const key = `${selectedDate}:${statusFilter}`;
+    const unsub = doClient.subscribe((state) => {
+      if (state.lists[key]) {
+        setMatches(state.lists[key]);
+        setLoading(false);
+        setError(null);
+      }
+    });
+    return unsub;
+  }, [selectedDate, statusFilter]);
 
   const grouped = useMemo(() => {
     const map: Record<string, MatchData[]> = {};
