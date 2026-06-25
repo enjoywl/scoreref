@@ -9,7 +9,6 @@ type Env = {
   };
   SCOREREF_KV?: {
     get(key: string, type: "json"): Promise<any>;
-    get(keys: string[]): Promise<Map<string, string | null>>;
   };
 };
 
@@ -69,8 +68,9 @@ function isSuccess(json: any) {
   return json.code === 200 || json.code === 0;
 }
 
-const EDGE_MAX_AGE = 30;
-const EDGE_SWR = 120;
+const EDGE_MAX_AGE = 30;      // Trigger background refresh after 30s
+const EDGE_SWR = 120;        // Keep serving stale up to 2min after expiry
+const CACHE_PERSIST = 300;   // Actual Cache API TTL (prevents premature eviction)
 
 async function cachedProxy(c: any, path: string, cacheKey: string, env: Env, pickFields?: readonly string[]) {
   const cache = caches.default;
@@ -118,41 +118,26 @@ async function cachedProxy(c: any, path: string, cacheKey: string, env: Env, pic
   return Response.json(json, { headers: { "Cache-Control": "public, max-age=10" } });
 }
 
-const BATCH_SIZE = 50;
+// Browser cache TTL by status filter
+function maxAgeForStatus(status: string): number {
+  if (status === "1") return 5;       // Live
+  if (status === "0") return 10;      // Scheduled
+  if (status === "-1") return 300;    // Finished
+  return 5;                           // All (conservative, includes live)
+}
 
 // --- KV-backed match list fetch ---
 async function fetchMatchesFromKV(date: string, status: string, env: Env) {
   const kv = env.SCOREREF_KV;
   if (!kv) return null;
 
-  const allMeta = await kv.get("sf:all:15d:m", "json") as any[];
-  if (!allMeta || !Array.isArray(allMeta)) return null;
+  // Single key per day, contains full match data array
+  const matches = await kv.get(`sf:d:${date}:v`, "json") as any[];
+  if (!matches || !Array.isArray(matches)) return null;
+  if (matches.length === 0) return [];
 
-  // Filter by date (mt is unix timestamp in seconds)
-  const dateStart = Math.floor(new Date(date + "T00:00:00Z").getTime() / 1000);
-  const dateEnd = dateStart + 86400;
-  const matchesOnDate = allMeta.filter((m: any) => m.mt >= dateStart && m.mt < dateEnd);
-
-  if (matchesOnDate.length === 0) return [];
-
-  // Bulk-read match details in parallel batches
-  const keys = matchesOnDate.map((m: any) => `${m.mid}:m`);
-  const batches: string[][] = [];
-  for (let i = 0; i < keys.length; i += BATCH_SIZE) {
-    batches.push(keys.slice(i, i + BATCH_SIZE));
-  }
-
-  const maps = await Promise.all(batches.map(batch => kv.get(batch)));
-  const details: any[] = [];
-  for (let i = 0; i < batches.length; i++) {
-    for (const key of batches[i]) {
-      const raw = maps[i].get(key);
-      details.push(raw ? JSON.parse(raw) : null);
-    }
-  }
-
-  // Filter out nulls and by status
-  let results = details.filter((m: any) => m !== null);
+  // Filter by status
+  let results = matches;
   if (status === "1") results = results.filter((m: any) => m.stat === 1);
   else if (status === "0") results = results.filter((m: any) => m.stat === 0);
   else if (status === "-1") results = results.filter((m: any) => m.stat === 3 || m.stat === -1);
@@ -163,8 +148,9 @@ async function fetchMatchesFromKV(date: string, status: string, env: Env) {
 // --- Match list ---
 app.get("/api/matches", async (c) => {
   const date = c.req.query("date") || new Date().toISOString().slice(0, 10);
-  const status = c.req.query("status") || "1";
+  const status = c.req.query("status") ?? "1";
   const cacheKey = `matches?date=${date}&status=${status}`;
+  const maxAge = maxAgeForStatus(status);
   const cache = caches.default;
   const ck = new Request(`https://cache.internal/${cacheKey}`);
 
@@ -180,7 +166,7 @@ app.get("/api/matches", async (c) => {
             const entry = new Response(JSON.stringify({ code: 200, data }), {
               headers: {
                 "Content-Type": "application/json",
-                "Cache-Control": `public, max-age=${EDGE_MAX_AGE}, stale-while-revalidate=${EDGE_SWR}`,
+                "Cache-Control": `public, max-age=${CACHE_PERSIST}`,
                 "X-Cache-Age": String(Date.now()),
               },
             });
@@ -190,7 +176,7 @@ app.get("/api/matches", async (c) => {
       );
     }
     const resp = new Response(cached.body, cached);
-    resp.headers.set("Cache-Control", "public, max-age=10");
+    resp.headers.set("Cache-Control", `public, max-age=${maxAge}`);
     return resp;
   }
 
@@ -206,13 +192,24 @@ app.get("/api/matches", async (c) => {
     });
     c.executionCtx.waitUntil(cache.put(ck, cacheEntry));
     return new Response(JSON.stringify({ code: 200, data }), {
-      headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=10" },
+      headers: { "Content-Type": "application/json", "Cache-Control": `public, max-age=${maxAge}` },
     });
   }
 
-  // Fallback to origin
+  // Fallback to origin (no duplicate cache check)
   const path = `/v2/api/soccer/match/by-status?date=${date}&status=${status}`;
-  return cachedProxy(c, path, cacheKey, c.env, MATCH_LIST_FIELDS);
+  const json = await fetchFromOrigin(path, c.env);
+  if (!json || !isSuccess(json)) {
+    return c.json(json || { error: "Upstream error" }, json && isSuccess(json) ? 200 : 502);
+  }
+  if (MATCH_LIST_FIELDS && Array.isArray(json.data)) {
+    json.data = stripFields(json.data, MATCH_LIST_FIELDS);
+  }
+  const cacheEntry = Response.json(json);
+  cacheEntry.headers.set("Cache-Control", `public, max-age=${EDGE_MAX_AGE}, stale-while-revalidate=${EDGE_SWR}`);
+  cacheEntry.headers.set("X-Cache-Age", String(Date.now()));
+  c.executionCtx.waitUntil(cache.put(ck, cacheEntry));
+  return Response.json(json, { headers: { "Cache-Control": `public, max-age=${maxAge}` } });
 });
 
 // --- Match detail APIs ---

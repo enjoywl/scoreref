@@ -63,14 +63,14 @@ export default function MatchList() {
   const today = dateOptions[6]?.value || new Date().toISOString().slice(0, 10);
 
   const groupBy = (searchParams.get("groupBy") as "league" | "country") || "league";
-  const statusFilter = searchParams.get("status") ?? "1";
+  const statusFilter = searchParams.has("status") ? searchParams.get("status")! : "1";
   const selectedDate = searchParams.get("date") || today;
 
   function setGroupBy(val: "league" | "country") {
     setSearchParams(prev => { prev.set("groupBy", val); return prev; });
   }
   function setStatusFilter(val: string) {
-    setSearchParams(prev => { if (val) prev.set("status", val); else prev.delete("status"); return prev; });
+    setSearchParams(prev => { prev.set("status", val); return prev; });
   }
   function setSelectedDate(val: string) {
     setSearchParams(prev => { if (val !== today) prev.set("date", val); else prev.delete("date"); return prev; });
@@ -81,7 +81,7 @@ export default function MatchList() {
     setError(null);
     try {
       const params = new URLSearchParams({ date: selectedDate });
-      if (statusFilter) params.set("status", statusFilter);
+      params.set("status", statusFilter);
       const res = await fetch(`/api/matches?${params}`);
       const json = await res.json();
       if (json.code === 200) {
