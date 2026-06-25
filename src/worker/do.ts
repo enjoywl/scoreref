@@ -27,7 +27,7 @@ interface DOEnv {
 }
 
 const ORIGIN = "http://106.42.192.93:8090";
-const REFRESH_INTERVAL = 60_000; // 60s between alarm-driven refreshes
+const REFRESH_INTERVAL = 25_000; // 25s — under 30s hibernation threshold to keep DO warm
 
 const MATCH_LIST_FIELDS = [
   "mid", "cty", "lnam", "lpc", "mtim", "stat",
@@ -71,22 +71,19 @@ export class ScorerefDO extends DurableObject<DOEnv> {
 
   constructor(ctx: DurableObjectState, env: DOEnv) {
     super(ctx, env);
-    ctx.blockConcurrencyWhile(async () => {
-      // Restore persisted details
-      const detailKeys = await ctx.storage.list({ prefix: "D:" });
-      const detailResults = await Promise.all(
-        [...detailKeys.keys()].map(async (k) => {
+    // Restore persisted details in background — don't block requests.
+    // The alarm (set after restore) populates lists within ~1s.
+    // Requests before that get empty results; callers fall back to Cache/KV/Origin.
+    Promise.allSettled([
+      (async () => {
+        const detailKeys = await ctx.storage.list({ prefix: "D:" });
+        for (const [k] of detailKeys) {
           const v = await ctx.storage.get<MatchDetail>(k);
-          return { key: k.slice(2), value: v };
-        })
-      );
-      for (const { key, value } of detailResults) {
-        if (value) this.details.set(key, value);
-      }
-
-      // Set initial alarm to trigger data load (fires ~1s after construction)
-      await ctx.storage.setAlarm(Date.now() + 1000);
-    });
+          if (v) this.details.set(k.slice(2), v);
+        }
+        await ctx.storage.setAlarm(Date.now() + 1000);
+      })(),
+    ]);
   }
 
   // --- DO Alarm: self-managed periodic refresh ---

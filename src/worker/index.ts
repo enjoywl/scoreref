@@ -154,22 +154,25 @@ app.get("/api/matches", async (c) => {
   const status = c.req.query("status") ?? "1";
   const maxAge = maxAgeForStatus(status);
 
-  // Try DO first (< 10ms, data refreshed every 60s by cron)
-  const doBinding = c.env.SCOREREF_DO;
-  if (doBinding) {
-    try {
-      const id = doBinding.idFromName("default");
-      const stub = doBinding.get(id);
-      const doResp = await stub.fetch(`https://do.internal/matches?date=${date}&status=${status}`);
-      if (doResp.ok) {
-        const json = await doResp.json() as any;
-        if (json.code === 200 && json.data?.length > 0) {
-          return Response.json(json, {
-            headers: { "Cache-Control": `public, max-age=${maxAge}` },
-          });
+  // Only route live match (status=1) to DO — real-time data matters.
+  // Scheduled (0) and finished (-1) use Cache/KV to avoid DO cold start penalty.
+  if (status === "1") {
+    const doBinding = c.env.SCOREREF_DO;
+    if (doBinding) {
+      try {
+        const id = doBinding.idFromName("default");
+        const stub = doBinding.get(id);
+        const doResp = await stub.fetch(`https://do.internal/matches?date=${date}&status=1`);
+        if (doResp.ok) {
+          const json = await doResp.json() as any;
+          if (json.code === 200 && json.data?.length > 0) {
+            return Response.json(json, {
+              headers: { "Cache-Control": `public, max-age=${maxAge}` },
+            });
+          }
         }
-      }
-    } catch { /* DO unavailable, fall through */ }
+      } catch { /* DO unavailable, fall through */ }
+    }
   }
 
   const cacheKey = `matches?date=${date}&status=${status}`;
