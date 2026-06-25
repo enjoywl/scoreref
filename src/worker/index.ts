@@ -152,12 +152,31 @@ async function fetchMatchesFromKV(date: string, status: string, env: Env) {
 app.get("/api/matches", async (c) => {
   const date = c.req.query("date") || new Date().toISOString().slice(0, 10);
   const status = c.req.query("status") ?? "1";
-  const cacheKey = `matches?date=${date}&status=${status}`;
   const maxAge = maxAgeForStatus(status);
+
+  // Try DO first (< 10ms, data refreshed every 60s by cron)
+  const doBinding = c.env.SCOREREF_DO;
+  if (doBinding) {
+    try {
+      const id = doBinding.idFromName("default");
+      const stub = doBinding.get(id);
+      const doResp = await stub.fetch(`https://do.internal/matches?date=${date}&status=${status}`);
+      if (doResp.ok) {
+        const json = await doResp.json() as any;
+        if (json.code === 200 && json.data?.length > 0) {
+          return Response.json(json, {
+            headers: { "Cache-Control": `public, max-age=${maxAge}` },
+          });
+        }
+      }
+    } catch { /* DO unavailable, fall through */ }
+  }
+
+  const cacheKey = `matches?date=${date}&status=${status}`;
   const cache = caches.default;
   const ck = new Request(`https://cache.internal/${cacheKey}`);
 
-  // Check Cache API first
+  // Check Cache API next
   const cached = await cache.match(ck);
   if (cached) {
     const age = parseInt(cached.headers.get("X-Cache-Age") || "0");
@@ -249,6 +268,25 @@ app.get("/api/match/:mid/stats", (c) => {
 // --- Aggregated detail (BFF: 1 request instead of 6) ---
 app.get("/api/match/:mid/full", async (c) => {
   const mid = c.req.param("mid");
+
+  // Try DO first (< 10ms, live match details are pushed by cron)
+  const doBinding = c.env.SCOREREF_DO;
+  if (doBinding) {
+    try {
+      const id = doBinding.idFromName("default");
+      const stub = doBinding.get(id);
+      const doResp = await stub.fetch(`https://do.internal/full?mid=${mid}`);
+      if (doResp.ok) {
+        const json = await doResp.json() as any;
+        if (json.code === 200 && json.data) {
+          return Response.json(json, {
+            headers: { "Cache-Control": "public, max-age=10" },
+          });
+        }
+      }
+    } catch { /* DO unavailable, fall through */ }
+  }
+
   const cacheKey = `full/${mid}`;
   const cache = caches.default;
   const ck = new Request(`https://cache.internal/${cacheKey}`);
