@@ -353,10 +353,13 @@ app.notFound((c) => {
   return c.text("Not Found", 404);
 });
 
-export default app;
+export default {
+  fetch: app.fetch.bind(app),
+  scheduled: runScheduled,
+};
 
 // --- Cron trigger: push match data to DO every 60s ---
-export async function scheduled(_controller: ScheduledController, env: Env, _ctx: ExecutionContext) {
+async function runScheduled(_controller: ScheduledController, env: Env, _ctx: ExecutionContext) {
   const doBinding = env.SCOREREF_DO;
   if (!doBinding) {
     console.error("Cron: SCOREREF_DO binding not available");

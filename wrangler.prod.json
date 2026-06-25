@@ -1,8 +1,7 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "scoreref",
-	"main": "dist/scoreref/index.js",
-	"no_bundle": true,
+	"main": "./src/worker/index.ts",
 	"compatibility_date": "2026-06-21",
 	"compatibility_flags": ["nodejs_compat"],
 	"placement": { "mode": "smart" },
