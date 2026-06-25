@@ -27,7 +27,7 @@ interface DOEnv {
 }
 
 const ORIGIN = "http://106.42.192.93:8090";
-const REFRESH_INTERVAL = 25_000; // 25s — under 30s hibernation threshold to keep DO warm
+const REFRESH_INTERVAL = 60_000; // 60s between alarm-driven refreshes
 
 const MATCH_LIST_FIELDS = [
   "mid", "cty", "lnam", "lpc", "mtim", "stat",

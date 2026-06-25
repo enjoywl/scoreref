@@ -17,6 +17,15 @@ type Env = {
 
 const app = new Hono<{ Bindings: Env }>();
 
+const DO_TIMEOUT = 500; // If DO doesn't respond in 500ms, it's cold — fall back
+
+function doWithTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
+  return Promise.race([
+    promise,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
+  ]);
+}
+
 const BASE = "http://106.42.192.93:8090";
 
 const MATCH_LIST_FIELDS = [
@@ -162,8 +171,11 @@ app.get("/api/matches", async (c) => {
       try {
         const id = doBinding.idFromName("default");
         const stub = doBinding.get(id);
-        const doResp = await stub.fetch(`https://do.internal/matches?date=${date}&status=1`);
-        if (doResp.ok) {
+        const doResp = await doWithTimeout(
+          stub.fetch(`https://do.internal/matches?date=${date}&status=1`),
+          DO_TIMEOUT,
+        );
+        if (doResp?.ok) {
           const json = await doResp.json() as any;
           if (json.code === 200 && json.data?.length > 0) {
             return Response.json(json, {
@@ -278,8 +290,11 @@ app.get("/api/match/:mid/full", async (c) => {
     try {
       const id = doBinding.idFromName("default");
       const stub = doBinding.get(id);
-      const doResp = await stub.fetch(`https://do.internal/full?mid=${mid}`);
-      if (doResp.ok) {
+      const doResp = await doWithTimeout(
+        stub.fetch(`https://do.internal/full?mid=${mid}`),
+        DO_TIMEOUT,
+      );
+      if (doResp?.ok) {
         const json = await doResp.json() as any;
         if (json.code === 200 && json.data) {
           return Response.json(json, {
