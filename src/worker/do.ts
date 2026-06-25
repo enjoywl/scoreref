@@ -22,12 +22,26 @@ interface MatchDetail {
   incidents: any[];
 }
 
-// DO env bindings — VPC for origin access
 interface DOEnv {
   VPC_SERVICE?: { fetch(url: string): Promise<Response> };
 }
 
 const ORIGIN = "http://106.42.192.93:8090";
+const REFRESH_INTERVAL = 60_000; // 60s between alarm-driven refreshes
+
+const MATCH_LIST_FIELDS = [
+  "mid", "cty", "lnam", "lpc", "mtim", "stat",
+  "hnam", "anam", "hscr", "ascr", "hhsc", "ahsc",
+  "hpc", "apc", "seas", "locn",
+] as const;
+
+function stripFields(data: any[], fields: readonly string[]) {
+  return data.map((m) => {
+    const item: Record<string, unknown> = {};
+    for (const k of fields) item[k] = m[k];
+    return item;
+  });
+}
 
 async function fetchFromOrigin(path: string, env: DOEnv) {
   const url = `${ORIGIN}${path}`;
@@ -52,14 +66,13 @@ async function fetchFromOrigin(path: string, env: DOEnv) {
 }
 
 export class ScorerefDO extends DurableObject<DOEnv> {
-  // In-memory cache: matches lists + match details
-  private lists: Map<string, MatchListItem[]> = new Map();   // "date:status"
-  private details: Map<string, MatchDetail> = new Map();      // "mid"
+  private lists: Map<string, MatchListItem[]> = new Map();
+  private details: Map<string, MatchDetail> = new Map();
 
   constructor(ctx: DurableObjectState, env: DOEnv) {
     super(ctx, env);
     ctx.blockConcurrencyWhile(async () => {
-      // Only persist details (lists are ephemeral, repopulated by cron every 60s)
+      // Restore persisted details
       const detailKeys = await ctx.storage.list({ prefix: "D:" });
       const detailResults = await Promise.all(
         [...detailKeys.keys()].map(async (k) => {
@@ -70,34 +83,138 @@ export class ScorerefDO extends DurableObject<DOEnv> {
       for (const { key, value } of detailResults) {
         if (value) this.details.set(key, value);
       }
+
+      // Set initial alarm to trigger data load (fires ~1s after construction)
+      await ctx.storage.setAlarm(Date.now() + 1000);
     });
   }
 
+  // --- DO Alarm: self-managed periodic refresh ---
+  async alarm() {
+    await this.refreshMatchData();
+    // Schedule next refresh
+    await this.ctx.storage.setAlarm(Date.now() + REFRESH_INTERVAL);
+  }
+
+  private async refreshMatchData() {
+    // 13-day window: today ± 6 days
+    const dates: string[] = [];
+    const now = new Date();
+    for (let i = -6; i <= 6; i++) {
+      const d = new Date(now);
+      d.setDate(d.getDate() + i);
+      dates.push(d.toISOString().slice(0, 10));
+    }
+
+    const lists: Record<string, MatchListItem[]> = {};
+    const liveMids = new Set<string>();
+
+    // Fetch all dates in parallel (13 concurrent requests)
+    const results = await Promise.allSettled(
+      dates.map(async (date) => {
+        const json = await fetchFromOrigin(
+          `/v2/api/soccer/match/by-status?date=${date}`, this.env);
+        return { date, json };
+      })
+    );
+
+    for (const r of results) {
+      if (r.status !== "fulfilled" || !r.value) continue;
+      const { date, json } = r.value;
+      if (!json || !Array.isArray(json.data)) continue;
+
+      const stripped = stripFields(json.data, MATCH_LIST_FIELDS) as any[];
+
+      // Split by status in code
+      const live: typeof stripped = [];
+      const scheduled: typeof stripped = [];
+      const finished: typeof stripped = [];
+
+      for (const m of stripped) {
+        if (m.stat === 1) { live.push(m); liveMids.add(m.mid); }
+        else if (m.stat === 0) scheduled.push(m);
+        else finished.push(m);
+      }
+
+      if (live.length) lists[`${date}:1`] = live;
+      if (scheduled.length) lists[`${date}:0`] = scheduled;
+      if (finished.length) lists[`${date}:-1`] = finished;
+    }
+
+    // Fetch details for live matches (batched)
+    const midArray = [...liveMids];
+    const BATCH = 10;
+    for (let i = 0; i < midArray.length; i += BATCH) {
+      const batch = midArray.slice(i, i + BATCH);
+      const detailResults = await Promise.allSettled(
+        batch.map(async (mid) => {
+          const [info, inc] = await Promise.all([
+            fetchFromOrigin(`/v2/api/soccer/match/match-info?matchId=${mid}`, this.env),
+            fetchFromOrigin(`/v2/api/soccer/match/incidents?matchId=${mid}`, this.env),
+          ]);
+          if (info?.data) {
+            return { mid, detail: { info: info.data, incidents: inc?.data?.incd || [] } };
+          }
+          return null;
+        })
+      );
+      for (const dr of detailResults) {
+        if (dr.status === "fulfilled" && dr.value) {
+          this.details.set(dr.value.mid, dr.value.detail);
+        }
+      }
+    }
+
+    // Update in-memory state
+    for (const [key, value] of Object.entries(lists)) {
+      this.lists.set(key, value);
+    }
+
+    // Persist details
+    if (liveMids.size > 0) {
+      const puts: Promise<void>[] = [];
+      for (const mid of liveMids) {
+        const detail = this.details.get(mid);
+        if (detail) puts.push(this.ctx.storage.put(`D:${mid}`, detail));
+      }
+      await Promise.all(puts);
+    }
+
+    // Broadcast to WebSocket clients
+    this.broadcast({ type: "update", lists, details: Object.fromEntries(
+      [...liveMids].map(mid => [mid, this.details.get(mid)]).filter(([, v]) => v)
+    ) });
+  }
+
+  // --- Request routing ---
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
 
-    // WebSocket upgrade
     if (url.pathname === "/ws") {
       return this.handleWebSocket();
     }
 
-    // Batch push from Cron Worker
+    // Manual refresh trigger (backup, can be called by external cron)
+    if (url.pathname === "/refresh" && request.method === "POST") {
+      await this.refreshMatchData();
+      await this.ctx.storage.setAlarm(Date.now() + REFRESH_INTERVAL);
+      return Response.json({ ok: true });
+    }
+
+    // Batch push (kept for backward compat / external push)
     if (url.pathname === "/batch" && request.method === "POST") {
       return this.handleBatch(request);
     }
 
-    // HTTP fallback: match list
     if (url.pathname === "/matches") {
       const key = `${url.searchParams.get("date") || ""}:${url.searchParams.get("status") || "1"}`;
       return Response.json({ code: 200, data: this.lists.get(key) || [] });
     }
 
-    // HTTP fallback: match detail
     if (url.pathname === "/full") {
       const mid = url.searchParams.get("mid");
       if (mid) {
         let detail = this.details.get(mid);
-        // Lazy-load from origin if not in memory
         if (!detail) {
           detail = await this.fetchDetailFromOrigin(mid);
           if (detail) this.details.set(mid, detail);
@@ -115,7 +232,6 @@ export class ScorerefDO extends DurableObject<DOEnv> {
     const [client, server] = Object.values(pair);
     this.ctx.acceptWebSocket(server);
 
-    // Send current full snapshot to newly connected client
     server.send(JSON.stringify({
       type: "snapshot",
       lists: Object.fromEntries(this.lists),
@@ -136,20 +252,13 @@ export class ScorerefDO extends DurableObject<DOEnv> {
         }
         ws.send(JSON.stringify({ type: "detail", mid: req.mid, data: detail }));
       }
-    } catch {
-      // ignore malformed messages
-    }
+    } catch { /* ignore */ }
   }
 
-  async webSocketClose(_ws: WebSocket) {
-    // no-op: Hibernation API handles cleanup
-  }
+  async webSocketClose(_ws: WebSocket) { /* Hibernation API handles cleanup */ }
+  async webSocketError(_ws: WebSocket, _error: Error) { /* no-op */ }
 
-  async webSocketError(_ws: WebSocket, _error: Error) {
-    // no-op
-  }
-
-  // --- Batch update ---
+  // --- Batch update (backward compat) ---
   private async handleBatch(request: Request) {
     const body = await request.json() as {
       lists?: Record<string, MatchListItem[]>;
@@ -175,8 +284,6 @@ export class ScorerefDO extends DurableObject<DOEnv> {
     if (changed) {
       this.broadcast({ type: "update", lists: body.lists, details: body.details });
 
-      // Persist details only (lists are ephemeral — too large for DO Storage,
-      // repopulated by cron every 60s)
       if (body.details) {
         const puts: Promise<void>[] = [];
         for (const [key, value] of Object.entries(body.details)) {
@@ -189,7 +296,7 @@ export class ScorerefDO extends DurableObject<DOEnv> {
     return Response.json({ ok: true });
   }
 
-  // --- Broadcast to all connected WebSockets ---
+  // --- Broadcast to all WebSocket clients ---
   private broadcast(msg: Record<string, unknown>) {
     const data = JSON.stringify(msg);
     for (const ws of this.ctx.getWebSockets()) {
@@ -197,7 +304,7 @@ export class ScorerefDO extends DurableObject<DOEnv> {
     }
   }
 
-  // --- Lazy fetch match detail from origin ---
+  // --- Lazy fetch single match detail ---
   private async fetchDetailFromOrigin(mid: string): Promise<MatchDetail | undefined> {
     const [info, inc] = await Promise.all([
       fetchFromOrigin(`/v2/api/soccer/match/match-info?matchId=${mid}`, this.env),
