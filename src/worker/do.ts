@@ -59,12 +59,29 @@ export class ScorerefDO extends DurableObject<DOEnv> {
   constructor(ctx: DurableObjectState, env: DOEnv) {
     super(ctx, env);
     ctx.blockConcurrencyWhile(async () => {
-      const [lists, details] = await Promise.all([
-        ctx.storage.get<[string, MatchListItem[]][]>("lists"),
-        ctx.storage.get<[string, MatchDetail][]>("details"),
-      ]);
-      if (lists) this.lists = new Map(lists);
-      if (details) this.details = new Map(details);
+      // Load per-key list entries (prefix "L:")
+      const listKeys = await ctx.storage.list({ prefix: "L:" });
+      const listResults = await Promise.all(
+        [...listKeys.keys()].map(async (k) => {
+          const v = await ctx.storage.get<MatchListItem[]>(k);
+          return { key: k.slice(2), value: v };
+        })
+      );
+      for (const { key, value } of listResults) {
+        if (value) this.lists.set(key, value);
+      }
+
+      // Load per-key detail entries (prefix "D:")
+      const detailKeys = await ctx.storage.list({ prefix: "D:" });
+      const detailResults = await Promise.all(
+        [...detailKeys.keys()].map(async (k) => {
+          const v = await ctx.storage.get<MatchDetail>(k);
+          return { key: k.slice(2), value: v };
+        })
+      );
+      for (const { key, value } of detailResults) {
+        if (value) this.details.set(key, value);
+      }
     });
   }
 
@@ -170,13 +187,29 @@ export class ScorerefDO extends DurableObject<DOEnv> {
     if (changed) {
       this.broadcast({ type: "update", lists: body.lists, details: body.details });
 
-      // Persist to DO storage
-      const listsArr: [string, MatchListItem[]][] = [...this.lists];
-      const detailsArr: [string, MatchDetail][] = [...this.details];
-      await Promise.all([
-        this.ctx.storage.put("lists", listsArr),
-        this.ctx.storage.put("details", detailsArr),
-      ]);
+      // Persist each entry as a separate key (under 128KB limit)
+      const puts: Promise<void>[] = [];
+      const liveListKeys = new Set<string>();
+
+      if (body.lists) {
+        for (const [key, value] of Object.entries(body.lists)) {
+          liveListKeys.add(`L:${key}`);
+          puts.push(this.ctx.storage.put(`L:${key}`, value));
+        }
+      }
+      if (body.details) {
+        for (const [key, value] of Object.entries(body.details)) {
+          puts.push(this.ctx.storage.put(`D:${key}`, value));
+        }
+      }
+      await Promise.all(puts);
+
+      // Cleanup stale list keys outside the current window
+      const existingLists = await this.ctx.storage.list({ prefix: "L:" });
+      const staleLists = [...existingLists.keys()].filter(k => !liveListKeys.has(k));
+      if (staleLists.length > 0) {
+        await this.ctx.storage.delete(staleLists);
+      }
     }
 
     return Response.json({ ok: true });
