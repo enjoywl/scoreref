@@ -32,5 +32,11 @@
 			"service_id": "019ee405-bfe8-7903-bebd-83312960a38f",
 			"remote": true
 		}
+	],
+	"kv_namespaces": [
+		{
+			"binding": "SCOREREF_KV",
+			"id": "c0ded4a89de741588b15352b39cf3592"
+		}
 	]
 }

@@ -7,6 +7,9 @@ type Env = {
   ASSETS?: {
     fetch: (request: Request) => Promise<Response>;
   };
+  SCOREREF_KV?: {
+    get: (key: string, type: "json") => Promise<any>;
+  };
 };
 
 const app = new Hono<{ Bindings: Env }>();
@@ -114,12 +117,88 @@ async function cachedProxy(c: any, path: string, cacheKey: string, env: Env, pic
   return Response.json(json, { headers: { "Cache-Control": "public, max-age=10" } });
 }
 
+// --- KV-backed match list fetch ---
+async function fetchMatchesFromKV(date: string, status: string, env: Env) {
+  const kv = env.SCOREREF_KV;
+  if (!kv) return null;
+
+  const allMeta = await kv.get("sf:all:15d:m", "json") as any[];
+  if (!allMeta || !Array.isArray(allMeta)) return null;
+
+  // Filter by date (mt is unix timestamp in seconds)
+  const dateStart = Math.floor(new Date(date + "T00:00:00Z").getTime() / 1000);
+  const dateEnd = dateStart + 86400;
+  const matchesOnDate = allMeta.filter((m: any) => m.mt >= dateStart && m.mt < dateEnd);
+
+  if (matchesOnDate.length === 0) return [];
+
+  // Fetch all match details in parallel from KV
+  const details = await Promise.all(
+    matchesOnDate.map((m: any) => kv.get(`${m.mid}:m`, "json"))
+  );
+
+  // Filter out nulls and by status
+  let results = details.filter((m: any) => m !== null);
+  if (status === "1") results = results.filter((m: any) => m.stat === 1);
+  else if (status === "0") results = results.filter((m: any) => m.stat === 0);
+  else if (status === "-1") results = results.filter((m: any) => m.stat === 3 || m.stat === -1);
+
+  return stripFields(results, MATCH_LIST_FIELDS);
+}
+
 // --- Match list ---
 app.get("/api/matches", async (c) => {
   const date = c.req.query("date") || new Date().toISOString().slice(0, 10);
   const status = c.req.query("status") || "1";
+  const cacheKey = `matches?date=${date}&status=${status}`;
+  const cache = caches.default;
+  const ck = new Request(`https://cache.internal/${cacheKey}`);
+
+  // Check Cache API first
+  const cached = await cache.match(ck);
+  if (cached) {
+    const age = parseInt(cached.headers.get("X-Cache-Age") || "0");
+    if (Date.now() - age > EDGE_MAX_AGE * 1000) {
+      c.executionCtx.waitUntil(
+        (async () => {
+          const data = await fetchMatchesFromKV(date, status, c.env);
+          if (data) {
+            const entry = new Response(JSON.stringify({ code: 200, data }), {
+              headers: {
+                "Content-Type": "application/json",
+                "Cache-Control": `public, max-age=${EDGE_MAX_AGE}, stale-while-revalidate=${EDGE_SWR}`,
+                "X-Cache-Age": String(Date.now()),
+              },
+            });
+            await cache.put(ck, entry);
+          }
+        })().catch(() => {})
+      );
+    }
+    const resp = new Response(cached.body, cached);
+    resp.headers.set("Cache-Control", "public, max-age=10");
+    return resp;
+  }
+
+  // Try KV first
+  const data = await fetchMatchesFromKV(date, status, c.env);
+  if (data) {
+    const cacheEntry = new Response(JSON.stringify({ code: 200, data }), {
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": `public, max-age=${EDGE_MAX_AGE}, stale-while-revalidate=${EDGE_SWR}`,
+        "X-Cache-Age": String(Date.now()),
+      },
+    });
+    c.executionCtx.waitUntil(cache.put(ck, cacheEntry));
+    return new Response(JSON.stringify({ code: 200, data }), {
+      headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=10" },
+    });
+  }
+
+  // Fallback to origin
   const path = `/v2/api/soccer/match/by-status?date=${date}&status=${status}`;
-  return cachedProxy(c, path, `matches?date=${date}&status=${status}`, c.env, MATCH_LIST_FIELDS);
+  return cachedProxy(c, path, cacheKey, c.env, MATCH_LIST_FIELDS);
 });
 
 // --- Match detail APIs ---
