@@ -16,6 +16,7 @@
   "env": {
     "production": {
       "placement": { "mode": "off" },
+      "workers_dev": true,
       "migrations": [
         {
           "tag": "v2",
@@ -37,7 +38,8 @@
         {
           "pattern": "www.scoreref.com",
           "zone_name": "scoreref.com",
-          "custom_domain": true
+          "custom_domain": true,
+          "enabled": true
         }
       ],
       "vars": {
