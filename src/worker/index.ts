@@ -35,11 +35,17 @@ async function proxy(c: any, path?: string): Promise<Response> {
 
   const req = new Request(target, init);
 
-  // VPC_SERVICE resolves the VPC name (e.g. cloudflared tunnel); no public DNS fallback
-  if (c.env.VPC_SERVICE) return c.env.VPC_SERVICE.fetch(req);
-
-  // local dev — direct fetch to localhost
-  return fetch(req);
+  try {
+    if (c.env.VPC_SERVICE) return await c.env.VPC_SERVICE.fetch(req);
+    // local dev — direct fetch to localhost
+    return await fetch(req);
+  } catch (e: any) {
+    console.error("proxy error:", e?.message);
+    return new Response(JSON.stringify({ code: -1, message: "backend unreachable" }), {
+      status: 502,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
 }
 
 // HTTP API proxy — all /api/* straight to backend
