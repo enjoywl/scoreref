@@ -12,5 +12,31 @@
   },
   "vars": {
     "API_SERVER": "http://localhost:3000"
+  },
+  "env": {
+    "production": {
+      "placement": { "mode": "off" },
+      "observability": {
+        "enabled": true,
+        "traces": { "enabled": true }
+      },
+      "vpc_services": [
+        {
+          "binding": "VPC_SERVICE",
+          "service_id": "019ee405-bfe8-7903-bebd-83312960a38f",
+          "remote": true
+        }
+      ],
+      "routes": [
+        {
+          "pattern": "www.scoreref.com",
+          "zone_name": "scoreref.com",
+          "custom_domain": true
+        }
+      ],
+      "vars": {
+        "API_SERVER": "http://106.42.192.93:3000"
+      }
+    }
   }
 }
