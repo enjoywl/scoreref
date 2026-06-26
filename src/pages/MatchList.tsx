@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useI18n } from "../locales";
-import { doClient, type MatchListItem } from "../lib/doClient";
+import { api, type MatchListItem } from "../lib/api";
 
 interface MatchData extends MatchListItem {}
 
@@ -62,7 +62,7 @@ export default function MatchList() {
 
   // Try DO first, fallback to HTTP
   const fetchMatches = useCallback(async () => {
-    const doList = doClient.getList(selectedDate, statusFilter);
+    const doList = api.getList(selectedDate, statusFilter);
     if (doList.length > 0) {
       setMatches(doList);
       setLoading(false);
@@ -72,7 +72,7 @@ export default function MatchList() {
     setLoading(true);
     setError(null);
     try {
-      const data = await doClient.fetchMatchesHTTP(selectedDate, statusFilter);
+      const data = await api.fetchMatches(selectedDate, statusFilter);
       if (data.length > 0) {
         setMatches(data);
       } else {
@@ -91,13 +91,13 @@ export default function MatchList() {
 
   // Connect to DO on mount
   useEffect(() => {
-    doClient.start();
+    api.start();
   }, []);
 
   // Subscribe to DO state updates for current filters
   useEffect(() => {
     const key = `${selectedDate}:${statusFilter}`;
-    const unsub = doClient.subscribe((state) => {
+    const unsub = api.subscribe((state) => {
       if (state.lists[key]) {
         setMatches(state.lists[key]);
         setLoading(false);

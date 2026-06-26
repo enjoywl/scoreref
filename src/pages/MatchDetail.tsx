@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useI18n } from "../locales";
-import { doClient } from "../lib/doClient";
+import { api } from "../lib/api";
 
 /* ---- Types ---- */
 interface MatchInfo {
@@ -143,15 +143,13 @@ export default function MatchDetail() {
     setH2h([]);
 
     // Try DO first (instant from memory or IndexedDB)
-    const doDetail = doClient.getDetail(matchId);
+    const doDetail = api.getDetail(matchId);
     if (doDetail) {
       setInfo(doDetail.info);
       setIncidents(doDetail.incidents);
       setLoading(false);
     } else {
-      // Request from DO (WebSocket) or HTTP fallback
-      doClient.requestDetail(matchId);
-      // Also start HTTP as parallel fallback
+      // HTTP fetch as primary (DO path removed)
       setLoading(true);
       const data = await fetchJSON(`/api/match/${matchId}/full`);
       if (data) {
@@ -210,12 +208,12 @@ export default function MatchDetail() {
 
   // Connect to DO and subscribe to live updates for this match
   useEffect(() => {
-    doClient.start();
+    api.start();
   }, []);
 
   useEffect(() => {
     if (!mid) return;
-    const unsub = doClient.subscribe((state) => {
+    const unsub = api.subscribe((state) => {
       const detail = state.details[mid];
       if (detail) {
         setInfo((prev) => {
