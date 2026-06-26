@@ -43,7 +43,7 @@
         }
       ],
       "vars": {
-        "API_SERVER": "http://106.42.192.93:3000"
+        "API_SERVER": "http://www.scoreref.com:3000"
       }
     }
   }
