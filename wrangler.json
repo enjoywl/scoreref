@@ -16,6 +16,12 @@
   "env": {
     "production": {
       "placement": { "mode": "off" },
+      "migrations": [
+        {
+          "tag": "v2",
+          "deleted_classes": ["ScorerefDO"]
+        }
+      ],
       "observability": {
         "enabled": true,
         "traces": { "enabled": true }
