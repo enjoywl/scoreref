@@ -15,6 +15,7 @@
   },
   "env": {
     "production": {
+      "name": "scoreref",
       "placement": { "mode": "off" },
       "workers_dev": true,
       "migrations": [
