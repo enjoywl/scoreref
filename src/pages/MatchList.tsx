@@ -60,11 +60,10 @@ export default function MatchList() {
     setSearchParams(prev => { if (val !== today) prev.set("date", val); else prev.delete("date"); return prev; });
   }
 
-  // Try DO first, fallback to HTTP
   const fetchMatches = useCallback(async () => {
-    const doList = api.getList(selectedDate, statusFilter);
-    if (doList.length > 0) {
-      setMatches(doList);
+    const cached = api.getList(selectedDate, statusFilter);
+    if (cached.length > 0) {
+      setMatches(cached);
       setLoading(false);
       return;
     }
@@ -89,12 +88,10 @@ export default function MatchList() {
     fetchMatches();
   }, [fetchMatches]);
 
-  // Connect to DO on mount
   useEffect(() => {
     api.start();
   }, []);
 
-  // Subscribe to DO state updates for current filters
   useEffect(() => {
     const key = `${selectedDate}:${statusFilter}`;
     const unsub = api.subscribe((state) => {

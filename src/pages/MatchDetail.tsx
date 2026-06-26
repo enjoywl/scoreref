@@ -142,14 +142,12 @@ export default function MatchDetail() {
     setLineups(null);
     setH2h([]);
 
-    // Try DO first (instant from memory or IndexedDB)
-    const doDetail = api.getDetail(matchId);
-    if (doDetail) {
-      setInfo(doDetail.info);
-      setIncidents(doDetail.incidents);
+    const cached = api.getDetail(matchId);
+    if (cached) {
+      setInfo(cached.info);
+      setIncidents(cached.incidents);
       setLoading(false);
     } else {
-      // HTTP fetch as primary (DO path removed)
       setLoading(true);
       const data = await fetchJSON(`/api/match/${matchId}/full`);
       if (data) {
@@ -206,7 +204,6 @@ export default function MatchDetail() {
     if (mid) loadMatchData(mid);
   }, [mid, loadMatchData]);
 
-  // Connect to DO and subscribe to live updates for this match
   useEffect(() => {
     api.start();
   }, []);
