@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 
 type Env = {
-  VPC_SERVICE?: Fetcher;
+  API_BINDING?: Fetcher;
   ASSETS?: Fetcher;
   API_SERVER?: string;
 };
@@ -36,7 +36,7 @@ async function proxy(c: any, path?: string): Promise<Response> {
   const req = new Request(target, init);
 
   try {
-    if (c.env.VPC_SERVICE) return await c.env.VPC_SERVICE.fetch(req);
+    if (c.env.API_BINDING) return await c.env.API_BINDING.fetch(req);
     // local dev — direct fetch to localhost
     return await fetch(req);
   } catch (e: any) {
