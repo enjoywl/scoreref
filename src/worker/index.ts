@@ -35,14 +35,10 @@ async function proxy(c: any, path?: string): Promise<Response> {
 
   const req = new Request(target, init);
 
-  if (c.env.VPC_SERVICE) {
-    try {
-      return await c.env.VPC_SERVICE.fetch(req);
-    } catch (e) {
-      console.error("VPC proxy failed:", e);
-    }
-  }
-  // direct fallback (works if backend has public IP)
+  // VPC_SERVICE resolves the VPC name (e.g. cloudflared tunnel); no public DNS fallback
+  if (c.env.VPC_SERVICE) return c.env.VPC_SERVICE.fetch(req);
+
+  // local dev — direct fetch to localhost
   return fetch(req);
 }
 
