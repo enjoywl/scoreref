@@ -38,8 +38,6 @@ function buildDateOptions(status: string, t: (k: string) => string) {
   return dates;
 }
 
-const statusCls: Record<number, string> = { 1: "live", 2: "ht" };
-
 function formatKickoff(ts: number) {
   const d = new Date(ts * 1000);
   return d.getHours().toString().padStart(2, "0") + ":" + d.getMinutes().toString().padStart(2, "0");
