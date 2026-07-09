@@ -17,6 +17,7 @@ export default function AppRouter() {
     <Suspense fallback={<Loading />}>
       <Routes>
         <Route path="/" element={<MatchList />} />
+        <Route path="/match/:slug/:mid" element={<MatchDetail />} />
         <Route path="/match/:mid" element={<MatchDetail />} />
       </Routes>
     </Suspense>

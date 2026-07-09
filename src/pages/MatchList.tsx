@@ -1,7 +1,9 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { Helmet } from "react-helmet-async";
 import { useI18n } from "../locales";
 import { api, type MatchListItem } from "../lib/api";
+import { matchSlug } from "../lib/slug";
 
 interface MatchData extends MatchListItem {}
 
@@ -9,10 +11,18 @@ function getWeekday(day: number, t: (k: string) => string) {
   return t("weekdays." + day);
 }
 
-function buildDateOptions(t: (k: string) => string) {
+function buildDateOptions(status: string, t: (k: string) => string) {
   const dates: { text: string; sub: string; value: string; isToday: boolean }[] = [];
   const now = new Date();
-  for (let i = -6; i <= 6; i++) {
+  let start: number, end: number;
+  if (status === "-1") {
+    start = -14; end = 0;  // Finished: past 14 days + today
+  } else if (status === "0") {
+    start = 0; end = 14;   // Scheduled: today + next 14 days
+  } else {
+    start = 0; end = 0;     // Live: today only
+  }
+  for (let i = start; i <= end; i++) {
     const d = new Date(now);
     d.setDate(d.getDate() + i);
     const value = d.toISOString().slice(0, 10);
@@ -28,11 +38,19 @@ function buildDateOptions(t: (k: string) => string) {
   return dates;
 }
 
-const statusCls: Record<number, string> = { 1: "live", 2: "ht", 3: "ft" };
+const statusCls: Record<number, string> = { 1: "live", 2: "ht" };
 
 function formatKickoff(ts: number) {
   const d = new Date(ts * 1000);
   return d.getHours().toString().padStart(2, "0") + ":" + d.getMinutes().toString().padStart(2, "0");
+}
+
+function leagueLogo(tid?: number): string {
+  return tid ? `/v1/image/league/${tid}.png` : "";
+}
+
+function teamLogo(teamId: number): string {
+  return teamId ? `/v1/image/team/${teamId}.png` : "";
 }
 
 export default function MatchList() {
@@ -43,18 +61,23 @@ export default function MatchList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const dateOptions = useMemo(() => buildDateOptions(t), [t]);
-  const today = dateOptions[6]?.value || new Date().toISOString().slice(0, 10);
+  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
   const groupBy = (searchParams.get("groupBy") as "league" | "country") || "league";
   const statusFilter = searchParams.has("status") ? searchParams.get("status")! : "1";
-  const selectedDate = searchParams.get("date") || today;
+  const dateOptions = useMemo(() => buildDateOptions(statusFilter, t), [statusFilter, t]);
+  const selectedDate = statusFilter === "1" ? today : (searchParams.get("date") || today);
 
   function setGroupBy(val: "league" | "country") {
     setSearchParams(prev => { prev.set("groupBy", val); return prev; });
   }
   function setStatusFilter(val: string) {
-    setSearchParams(prev => { prev.set("status", val); return prev; });
+    setSearchParams(prev => {
+      prev.set("status", val);
+      if (val === "1") prev.delete("date");
+      else if (!prev.has("date")) prev.set("date", today);
+      return prev;
+    });
   }
   function setSelectedDate(val: string) {
     setSearchParams(prev => { if (val !== today) prev.set("date", val); else prev.delete("date"); return prev; });
@@ -107,23 +130,30 @@ export default function MatchList() {
   const grouped = useMemo(() => {
     const map: Record<string, MatchData[]> = {};
     matches.forEach((m) => {
-      const key = groupBy === "league" ? m.lnam : m.cty;
+      const key = groupBy === "league" ? m.tnm : m.cty;
       (map[key] ||= []).push(m);
     });
     for (const list of Object.values(map)) {
-      list.sort((a, b) => a.mtim - b.mtim);
+      list.sort((a, b) => a.sts - b.sts);
     }
     return Object.entries(map);
   }, [matches, groupBy]);
 
   function getMatchTime(m: MatchData) {
-    if (m.stat === 1) {
-      const elapsed = Math.floor((Date.now() - m.mtim * 1000) / 60000);
+    if (m.sc >= 1 && m.sc < 100 && m.sc !== 31) {
+      const elapsed = Math.floor((Date.now() - m.sts * 1000) / 60000);
       return Math.max(0, elapsed) + "'";
     }
-    if (m.stat === 2) return t("match.ht");
-    if (m.stat === 3) return t("match.ft");
+    if (m.sc === 31) return t("match.ht");
+    if (m.sc >= 100) return t("match.ft");
     return t("match.unknown");
+  }
+
+  function statusBorder(sc: number): string {
+    if (sc >= 1 && sc < 100 && sc !== 31) return "live";
+    if (sc === 31) return "ht";
+    if (sc >= 100) return "ft";
+    return "def";
   }
 
   const borderColor: Record<string, string> = {
@@ -135,77 +165,85 @@ export default function MatchList() {
 
   return (
     <div className="max-w-[1200px] mx-auto p-4">
-      {/* Date bar */}
-      <div className="flex gap-1 mb-3 overflow-x-auto scrollbar-none">
-        {dateOptions.map((d) => (
-          <button
-            key={d.value}
-            onClick={() => setSelectedDate(d.value)}
-            className={`flex flex-col items-center min-w-[52px] px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors shrink-0
-              ${selectedDate === d.value
-                ? "bg-accent"
-                : d.isToday
-                  ? "bg-[#e3f2fd] dark:bg-[#1a2a3a]"
-                  : "hover:bg-black/5 dark:hover:bg-white/5"
-              }`}
-          >
-            <span
-              className={`text-xs ${selectedDate === d.value
-                ? "text-white font-semibold"
-                : d.isToday
-                  ? "text-accent"
-                  : "text-text-muted"
-              }`}
-            >
-              {d.text}
-            </span>
-            <span
-              className={`text-[11px] mt-px ${selectedDate === d.value
-                ? "text-white/80"
-                : "text-text-muted"
-              }`}
-            >
-              {d.sub}
-            </span>
-          </button>
-        ))}
-      </div>
+      <Helmet>
+        <title>Live Football Scores — ScoreRef</title>
+        <meta name="description" content="Live football scores and match results. Track fixtures, results, and real-time updates for football matches worldwide." />
+      </Helmet>
 
-      {/* Toolbar */}
-      <div className="flex items-center justify-between mb-5 pb-3 border-b border-border gap-2 flex-wrap">
-        <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
-          <select
-            value={groupBy}
-            onChange={(e) => setGroupBy(e.target.value as "league" | "country")}
-            className="text-xs bg-surface-muted text-text-primary border border-border rounded-md px-2.5 py-1.5 outline-none cursor-pointer w-[110px]"
-          >
-            <option value="league">{t("groupBy.league")}</option>
-            <option value="country">{t("groupBy.country")}</option>
-          </select>
-          <div className="flex bg-surface-muted rounded-md p-0.5">
-            {[
-              { label: t("status.all"), value: "" },
-              { label: t("status.live"), value: "1" },
-              { label: t("status.scheduled"), value: "0" },
-              { label: t("status.finished"), value: "-1" },
-            ].map((o) => (
-              <button
-                key={o.value}
-                onClick={() => setStatusFilter(o.value)}
-                className={`text-xs px-3 py-1 rounded cursor-pointer transition-all whitespace-nowrap
-                  ${statusFilter === o.value
-                    ? "bg-accent text-white font-semibold"
-                    : "text-text-muted hover:text-text-primary"
-                  }`}
-              >
-                {o.label}
-              </button>
-            ))}
-          </div>
+      {/* Status tabs */}
+      <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+        <div className="flex bg-surface-muted rounded-md p-0.5">
+          {[
+            { label: t("status.live"), value: "1" },
+            { label: t("status.scheduled"), value: "0" },
+            { label: t("status.finished"), value: "-1" },
+          ].map((o) => (
+            <button
+              key={o.value}
+              onClick={() => setStatusFilter(o.value)}
+              className={`text-xs px-3 py-1 rounded cursor-pointer transition-all whitespace-nowrap
+                ${statusFilter === o.value
+                  ? "bg-accent text-white font-semibold"
+                  : "text-text-muted hover:text-text-primary"
+                }`}
+            >
+              {o.label}
+            </button>
+          ))}
         </div>
         <span className="text-[13px] text-text-muted bg-surface-muted px-2.5 py-1 rounded-xl">
           {t("count", { n: matches.length })}
         </span>
+      </div>
+
+      {/* Date bar — hidden for Live */}
+      {statusFilter !== "1" && (
+        <div className="flex gap-1 mb-3 overflow-x-auto scrollbar-none">
+          {dateOptions.map((d) => (
+            <button
+              key={d.value}
+              onClick={() => setSelectedDate(d.value)}
+              className={`flex flex-col items-center min-w-[52px] px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors shrink-0
+                ${selectedDate === d.value
+                  ? "bg-accent"
+                  : d.isToday
+                    ? "bg-[#e3f2fd] dark:bg-[#1a2a3a]"
+                    : "hover:bg-black/5 dark:hover:bg-white/5"
+                }`}
+            >
+              <span
+                className={`text-xs ${selectedDate === d.value
+                  ? "text-white font-semibold"
+                  : d.isToday
+                    ? "text-accent"
+                    : "text-text-muted"
+                }`}
+              >
+                {d.text}
+              </span>
+              <span
+                className={`text-[11px] mt-px ${selectedDate === d.value
+                  ? "text-white/80"
+                  : "text-text-muted"
+                }`}
+              >
+                {d.sub}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Toolbar */}
+      <div className="flex items-center justify-start mb-5 pb-3 border-b border-border gap-2">
+        <select
+          value={groupBy}
+          onChange={(e) => setGroupBy(e.target.value as "league" | "country")}
+          className="text-xs bg-surface-muted text-text-primary border border-border rounded-md px-2.5 py-1.5 outline-none cursor-pointer w-[110px]"
+        >
+          <option value="league">{t("groupBy.league")}</option>
+          <option value="country">{t("groupBy.country")}</option>
+        </select>
       </div>
 
       {/* Loading skeleton */}
@@ -231,8 +269,8 @@ export default function MatchList() {
       {!loading && !error && grouped.map(([group, list]) => (
         <section key={group} className="mb-[18px]">
           <h2 className="text-[15px] font-semibold text-text-secondary mb-2.5 flex items-center gap-2">
-            {list[0]?.lpc && (
-              <img src={list[0].lpc} alt="" className="w-[22px] h-[22px] object-contain rounded" loading="lazy" />
+            {list[0]?.tid && (
+              <img src={leagueLogo(list[0].tid)} alt="" className="w-[22px] h-[22px] object-contain rounded" loading="lazy" />
             )}
             {group}
           </h2>
@@ -241,19 +279,19 @@ export default function MatchList() {
             {list.map((m) => (
               <div
                 key={m.mid}
-                onClick={() => navigate(`/match/${m.mid}`)}
-                className={`bg-surface rounded-[10px] py-3 px-4 border border-border-light border-l-4 ${borderColor[statusCls[m.stat]] || borderColor.def} hover:border-[#444] hover:translate-x-[3px] transition-all cursor-pointer`}
+                onClick={() => navigate(`/match/${matchSlug(m.hnm, m.anm)}/${m.mid}`)}
+                className={`bg-surface rounded-[10px] py-3 px-4 border border-border-light border-l-4 ${borderColor[statusBorder(m.sc)] || borderColor.def} hover:border-[#444] hover:translate-x-[3px] transition-all cursor-pointer`}
               >
                 <div className="flex items-center justify-between gap-1.5 sm:gap-3">
                   {/* Meta */}
                   <div className="flex flex-col items-end gap-1 shrink-0 min-w-[42px] sm:min-w-[55px]">
-                    <span className="text-[11px] sm:text-xs text-text-secondary tabular-nums">{formatKickoff(m.mtim)}</span>
+                    <span className="text-[11px] sm:text-xs text-text-secondary tabular-nums">{formatKickoff(m.sts)}</span>
                     <span
                       className={`text-[10px] sm:text-[11px] font-bold px-1.5 sm:px-2 py-0.5 rounded-[10px]
-                        ${m.stat === 1 ? "bg-accent text-white animate-pulse-ring" : ""}
-                        ${m.stat === 2 ? "bg-[#e6a23c] text-white" : ""}
-                        ${m.stat === 0 ? "bg-surface-alt text-text-muted" : ""}
-                        ${m.stat === 3 || m.stat === -1 ? "bg-surface-alt text-text-muted" : ""}
+                        ${m.sc >= 1 && m.sc < 100 && m.sc !== 31 ? "bg-accent text-white animate-pulse-ring" : ""}
+                        ${m.sc === 31 ? "bg-[#e6a23c] text-white" : ""}
+                        ${m.sc === 0 ? "bg-surface-alt text-text-muted" : ""}
+                        ${m.sc >= 100 ? "bg-surface-alt text-text-muted" : ""}
                       `}
                     >
                       {getMatchTime(m)}
@@ -262,22 +300,22 @@ export default function MatchList() {
 
                   {/* Home team */}
                   <div className="flex-1 flex items-center justify-end gap-1.5 sm:gap-2.5 text-right min-w-0">
-                    <img src={m.hpc} alt={m.hnam} className="w-6 h-6 sm:w-7 sm:h-7 object-contain rounded-full bg-surface-alt shrink-0" loading="lazy" />
-                    <span className="text-[12px] sm:text-[13px] font-medium text-text-primary max-w-[100px] sm:max-w-[140px] truncate">{m.hnam}</span>
+                    <img src={teamLogo(m.hid)} alt={m.hnm} className="w-6 h-6 sm:w-7 sm:h-7 object-contain rounded-full bg-surface-alt shrink-0" loading="lazy" />
+                    <span className="text-[12px] sm:text-[13px] font-medium text-text-primary max-w-[100px] sm:max-w-[140px] truncate">{m.hnm}</span>
                   </div>
 
                   {/* Score */}
                   <div className="flex flex-col items-center min-w-[60px] sm:min-w-[70px] shrink-0">
-                    <span className="text-lg sm:text-xl font-extrabold text-text-primary tracking-[2px] tabular-nums">{m.hscr} - {m.ascr}</span>
-                    {m.stat >= 2 && (
-                      <span className="text-[10px] sm:text-[11px] text-text-muted -mt-0.5">({m.hhsc} - {m.ahsc})</span>
+                    <span className="text-lg sm:text-xl font-extrabold text-text-primary tracking-[2px] tabular-nums">{m.hsc} - {m.asc}</span>
+                    {m.sc >= 31 && (
+                      <span className="text-[10px] sm:text-[11px] text-text-muted -mt-0.5">({m.hs1} - {m.as1})</span>
                     )}
                   </div>
 
                   {/* Away team */}
                   <div className="flex-1 flex items-center gap-1.5 sm:gap-2.5 min-w-0">
-                    <img src={m.apc} alt={m.anam} className="w-6 h-6 sm:w-7 sm:h-7 object-contain rounded-full bg-surface-alt shrink-0" loading="lazy" />
-                    <span className="text-[12px] sm:text-[13px] font-medium text-text-primary max-w-[100px] sm:max-w-[140px] truncate">{m.anam}</span>
+                    <img src={teamLogo(m.aid)} alt={m.anm} className="w-6 h-6 sm:w-7 sm:h-7 object-contain rounded-full bg-surface-alt shrink-0" loading="lazy" />
+                    <span className="text-[12px] sm:text-[13px] font-medium text-text-primary max-w-[100px] sm:max-w-[140px] truncate">{m.anm}</span>
                   </div>
                 </div>
               </div>
