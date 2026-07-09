@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { matchSlug } from "../../lib/slug";
+import { matchSlug } from "../lib/slug";
 
 type Env = {
   API_BINDING?: Fetcher;
