@@ -21,9 +21,10 @@ const I18nContext = createContext<I18nContextValue | null>(null);
 
 function resolve(obj: Record<string, unknown>, path: string): string {
   const parts = path.split(".");
-  let cur: Record<string, unknown> = obj;
+  let cur: unknown = obj;
   for (const p of parts) {
-    cur = cur?.[p];
+    if (typeof cur !== "object" || cur === null) return path;
+    cur = (cur as Record<string, unknown>)[p];
   }
   return typeof cur === "string" ? cur : path;
 }

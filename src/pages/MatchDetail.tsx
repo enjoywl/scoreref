@@ -107,10 +107,11 @@ function getSubstitutes(players: LineupPlayer[]) {
 }
 
 /* ---- Match table (shared by H2H / team fixtures) ---- */
-function MatchTable({ matches, refTeam, navigate }: {
+function MatchTable({ matches, refTeam, navigate, timezone }: {
   matches: H2hMatch[];
   refTeam: string;
   navigate: (path: string) => void;
+  timezone: string;
 }) {
   if (!matches.length) return <div className="text-center py-8 text-text-muted text-sm">No matches</div>;
   return (
@@ -741,7 +742,7 @@ export default function MatchDetail() {
                     Head to Head
                     {h2h.h2h.length > 0 && <span className="text-xs text-text-muted font-normal ml-2">({h2h.h2h.length} matches)</span>}
                   </h3>
-                  <MatchTable matches={h2h.h2h.slice(0, h2hLimit)} refTeam={info.hnm} navigate={navigate} />
+                  <MatchTable matches={h2h.h2h.slice(0, h2hLimit)} refTeam={info.hnm} navigate={navigate} timezone={timezone} />
                 </section>
 
                 {/* Block 2: Home team fixtures */}
@@ -771,6 +772,7 @@ export default function MatchDetail() {
                     matches={h2h.home[teamTab.home].slice(0, h2hLimit)}
                     refTeam={info.hnm}
                     navigate={navigate}
+                    timezone={timezone}
                   />
                 </section>
 
@@ -801,6 +803,7 @@ export default function MatchDetail() {
                     matches={h2h.away[teamTab.away].slice(0, h2hLimit)}
                     refTeam={info.anm}
                     navigate={navigate}
+                    timezone={timezone}
                   />
                 </section>
               </div>
