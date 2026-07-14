@@ -4,6 +4,7 @@ import { Helmet } from "react-helmet-async";
 import { useI18n } from "../locales";
 import { api } from "../lib/api";
 import { matchSlug } from "../lib/slug";
+import { useTimezone, formatKickoffTime, formatDateShort } from "../lib/timezone";
 
 /* ---- Types ---- */
 interface MatchInfo {
@@ -107,7 +108,7 @@ function getSubstitutes(players: LineupPlayer[]) {
 
 /* ---- Match table (shared by H2H / team fixtures) ---- */
 function MatchTable({ matches, refTeam, navigate }: {
-  matches: any[];
+  matches: H2hMatch[];
   refTeam: string;
   navigate: (path: string) => void;
 }) {
@@ -144,7 +145,7 @@ function MatchTable({ matches, refTeam, navigate }: {
                 className={`cursor-pointer transition-all hover:bg-accent/4 dark:hover:bg-accent/8 active:scale-[0.995] ${i % 2 === 1 ? "bg-black/[0.015] dark:bg-white/[0.02]" : ""}`}
               >
                 <td className="py-2.5 px-3 text-xs text-text-secondary border-b border-border-subtle whitespace-nowrap rounded-l-md">
-                  {ev.sts ? new Date(ev.sts * 1000).toLocaleDateString() : "-"}
+                  {ev.sts ? formatDateShort(ev.sts, timezone) : "-"}
                 </td>
                 <td className="py-2.5 px-3 text-xs text-text-muted border-b border-border-subtle max-w-[140px] truncate">{ev.tnm || "-"}</td>
                 <td className="py-2.5 px-3 text-center font-semibold text-text-primary border-b border-border-subtle">{ev.hnm || "-"}</td>
@@ -177,6 +178,7 @@ function MatchTable({ matches, refTeam, navigate }: {
 /* ---- Component ---- */
 export default function MatchDetail() {
   const { t } = useI18n();
+  const { timezone } = useTimezone();
   const params = useParams<{ mid: string; slug?: string }>();
   const mid = params.mid!;
   const slug = params.slug;
@@ -246,8 +248,8 @@ export default function MatchDetail() {
     fetchJSON(`/v1/api/match/${mid}/lineups`).then(d => {
       if (d) {
         setLineups({
-          home: (d.hm?.pl || []).map((p: any) => ({ nm: p.nm, sn: p.sn, sh: p.sh, pos: p.pos, sub: p.sub, cap: p.cap })),
-          away: (d.aw?.pl || []).map((p: any) => ({ nm: p.nm, sn: p.sn, sh: p.sh, pos: p.pos, sub: p.sub, cap: p.cap })),
+          home: (d.hm?.pl || []).map((p: Record<string, unknown>) => ({ nm: p.nm, sn: p.sn, sh: p.sh, pos: p.pos, sub: p.sub, cap: p.cap } as LineupPlayer)),
+          away: (d.aw?.pl || []).map((p: Record<string, unknown>) => ({ nm: p.nm, sn: p.sn, sh: p.sh, pos: p.pos, sub: p.sub, cap: p.cap } as LineupPlayer)),
           hform: d.hm?.fm || "", aform: d.aw?.fm || "",
         });
       }
@@ -409,7 +411,7 @@ export default function MatchDetail() {
             <div className="flex justify-center items-center gap-2 flex-wrap pt-4 border-t border-[#eee] dark:border-white/8">
               {info.snm && <span className="text-xs text-text-secondary bg-[#f0f0f0] dark:bg-white/5 px-3 py-1 rounded-xl">{info.snm}</span>}
               <span className="text-xs text-text-secondary bg-[#f0f0f0] dark:bg-white/5 px-3 py-1 rounded-xl">
-                {new Date(info.sts * 1000).getHours().toString().padStart(2, "0") + ":" + new Date(info.sts * 1000).getMinutes().toString().padStart(2, "0")}
+                {formatKickoffTime(info.sts, timezone)}
               </span>
               {info.vnm && <span className="text-xs text-text-secondary bg-[#f0f0f0] dark:bg-white/5 px-3 py-1 rounded-xl">{info.vnm}</span>}
               <span className="text-xs text-text-secondary bg-[#f0f0f0] dark:bg-white/5 px-3 py-1 rounded-xl">Ref: {info.rfn || "-"}</span>
@@ -474,10 +476,10 @@ export default function MatchDetail() {
               </div>
             ) : allStats ? (
               <div className="flex flex-col gap-4">
-                {allStats.gr.map((g: any) => (
+                {allStats.gr.map((g: { gn: string; si: StatItem[] }) => (
                   <div key={g.gn}>
                     <div className="text-xs text-accent font-semibold mb-2 uppercase tracking-wide">{g.gn}</div>
-                    {g.si.map((it: any) => {
+                    {g.si.map((it: StatItem) => {
                       const max = Math.max(it.hn, it.an);
                       const hPct = max ? Math.round((it.hn / max) * 100) : 0;
                       const aPct = max ? Math.round((it.an / max) * 100) : 0;

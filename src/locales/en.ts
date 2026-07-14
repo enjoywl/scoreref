@@ -18,6 +18,7 @@ export default {
     ft: "FT",
     unknown: "Unknown",
   },
+  timezone: "Timezone",
   weekdays: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
   loading: "Loading...",
   error: "Failed to load",

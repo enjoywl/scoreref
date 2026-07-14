@@ -19,9 +19,9 @@ interface I18nContextValue {
 
 const I18nContext = createContext<I18nContextValue | null>(null);
 
-function resolve(obj: any, path: string): string {
+function resolve(obj: Record<string, unknown>, path: string): string {
   const parts = path.split(".");
-  let cur = obj;
+  let cur: Record<string, unknown> = obj;
   for (const p of parts) {
     cur = cur?.[p];
   }

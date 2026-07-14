@@ -18,6 +18,7 @@ export default {
     ft: "已结束",
     unknown: "未知",
   },
+  timezone: "时区",
   weekdays: ["周日", "周一", "周二", "周三", "周四", "周五", "周六"],
   loading: "加载中...",
   error: "加载失败",

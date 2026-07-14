@@ -4,14 +4,13 @@ import { Helmet } from "react-helmet-async";
 import { useI18n } from "../locales";
 import { api, type MatchListItem } from "../lib/api";
 import { matchSlug } from "../lib/slug";
-
-interface MatchData extends MatchListItem {}
+import { useTimezone, getDateFields, formatKickoffTime, formatDateISO, TIMEZONE_OPTIONS } from "../lib/timezone";
 
 function getWeekday(day: number, t: (k: string) => string) {
   return t("weekdays." + day);
 }
 
-function buildDateOptions(status: string, t: (k: string) => string) {
+function buildDateOptions(status: string, t: (k: string) => string, tz: string) {
   const dates: { text: string; sub: string; value: string; isToday: boolean }[] = [];
   const now = new Date();
   let start: number, end: number;
@@ -25,22 +24,19 @@ function buildDateOptions(status: string, t: (k: string) => string) {
   for (let i = start; i <= end; i++) {
     const d = new Date(now);
     d.setDate(d.getDate() + i);
-    const value = d.toISOString().slice(0, 10);
-    const month = d.getMonth() + 1;
-    const day = d.getDate();
+    const fields = getDateFields(d, tz);
     dates.push({
-      text: getWeekday(d.getDay(), t),
-      sub: month + "/" + day,
-      value,
+      text: getWeekday(fields.weekday, t),
+      sub: fields.month + "/" + fields.day,
+      value: formatDateISO(d, tz),
       isToday: i === 0,
     });
   }
   return dates;
 }
 
-function formatKickoff(ts: number) {
-  const d = new Date(ts * 1000);
-  return d.getHours().toString().padStart(2, "0") + ":" + d.getMinutes().toString().padStart(2, "0");
+function formatKickoff(ts: number, tz: string) {
+  return formatKickoffTime(ts, tz);
 }
 
 function leagueLogo(tid?: number): string {
@@ -53,17 +49,18 @@ function teamLogo(teamId: number): string {
 
 export default function MatchList() {
   const { t } = useI18n();
+  const { timezone, setTimezone } = useTimezone();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [matches, setMatches] = useState<MatchData[]>([]);
+  const [matches, setMatches] = useState<MatchListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const today = useMemo(() => formatDateISO(new Date(), timezone), [timezone]);
 
   const groupBy = (searchParams.get("groupBy") as "league" | "country") || "league";
   const statusFilter = searchParams.has("status") ? searchParams.get("status")! : "1";
-  const dateOptions = useMemo(() => buildDateOptions(statusFilter, t), [statusFilter, t]);
+  const dateOptions = useMemo(() => buildDateOptions(statusFilter, t, timezone), [statusFilter, t, timezone]);
   const selectedDate = statusFilter === "1" ? today : (searchParams.get("date") || today);
 
   function setGroupBy(val: "league" | "country") {
@@ -92,18 +89,18 @@ export default function MatchList() {
     setLoading(true);
     setError(null);
     try {
-      const data = await api.fetchMatches(selectedDate, statusFilter);
+      const data = await api.fetchMatches(selectedDate, statusFilter, timezone);
       if (data.length > 0) {
         setMatches(data);
       } else {
         setError("No matches found");
       }
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError((err as Error).message);
     } finally {
       setLoading(false);
     }
-  }, [selectedDate, statusFilter]);
+  }, [selectedDate, statusFilter, timezone]);
 
   useEffect(() => {
     fetchMatches();
@@ -126,7 +123,7 @@ export default function MatchList() {
   }, [selectedDate, statusFilter]);
 
   const grouped = useMemo(() => {
-    const map: Record<string, MatchData[]> = {};
+    const map: Record<string, MatchListItem[]> = {};
     matches.forEach((m) => {
       const key = groupBy === "league" ? m.tnm : m.cty;
       (map[key] ||= []).push(m);
@@ -137,7 +134,7 @@ export default function MatchList() {
     return Object.entries(map);
   }, [matches, groupBy]);
 
-  function getMatchTime(m: MatchData) {
+  function getMatchTime(m: MatchListItem) {
     if (m.sc >= 1 && m.sc < 100 && m.sc !== 31) {
       const elapsed = Math.floor((Date.now() - m.sts * 1000) / 60000);
       return Math.max(0, elapsed) + "'";
@@ -242,6 +239,16 @@ export default function MatchList() {
           <option value="league">{t("groupBy.league")}</option>
           <option value="country">{t("groupBy.country")}</option>
         </select>
+        <select
+          value={timezone}
+          onChange={(e) => setTimezone(e.target.value)}
+          className="text-xs bg-surface-muted text-text-primary border border-border rounded-md px-2.5 py-1.5 outline-none cursor-pointer max-w-[180px]"
+          title={t("timezone")}
+        >
+          {TIMEZONE_OPTIONS.map((tz) => (
+            <option key={tz} value={tz}>{tz}</option>
+          ))}
+        </select>
       </div>
 
       {/* Loading skeleton */}
@@ -283,7 +290,7 @@ export default function MatchList() {
                 <div className="flex items-center justify-between gap-1.5 sm:gap-3">
                   {/* Meta */}
                   <div className="flex flex-col items-end gap-1 shrink-0 min-w-[42px] sm:min-w-[55px]">
-                    <span className="text-[11px] sm:text-xs text-text-secondary tabular-nums">{formatKickoff(m.sts)}</span>
+                    <span className="text-[11px] sm:text-xs text-text-secondary tabular-nums">{formatKickoff(m.sts, timezone)}</span>
                     <span
                       className={`text-[10px] sm:text-[11px] font-bold px-1.5 sm:px-2 py-0.5 rounded-[10px]
                         ${m.sc >= 1 && m.sc < 100 && m.sc !== 31 ? "bg-accent text-white animate-pulse-ring" : ""}

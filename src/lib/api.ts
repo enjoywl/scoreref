@@ -31,6 +31,7 @@ export interface MatchInfo {
 
 export interface MatchDetail {
   info: MatchInfo;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- API response shape is dynamic
   incidents: any[];
 }
 
@@ -41,6 +42,7 @@ export interface ApiState {
 
 type Listener = (state: ApiState) => void;
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- raw API data
 function mapMatch(m: Record<string, any>): MatchListItem {
   return {
     mid: m.mid,
@@ -89,8 +91,10 @@ class ApiClient {
     // HTTP-only mode — no WebSocket
   }
 
-  async fetchMatches(date: string, status: string): Promise<MatchListItem[]> {
-    const res = await fetch(`/v1/api/matches/${date}?status=${status}`);
+  async fetchMatches(date: string, status: string, timezone?: string): Promise<MatchListItem[]> {
+    const headers: Record<string, string> = {};
+    if (timezone) headers["X-Timezone"] = timezone;
+    const res = await fetch(`/v1/api/matches/${date}?status=${status}`, { headers });
     const json = await res.json();
     if (json.code === 200 && Array.isArray(json.data)) {
       const mapped = json.data.map(mapMatch);

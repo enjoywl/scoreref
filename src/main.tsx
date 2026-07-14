@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { HelmetProvider } from "react-helmet-async";
 import { I18nProvider } from "./locales";
+import { TimezoneProvider } from "./lib/timezone";
 import App from "./App";
 import "./index.css";
 
@@ -13,7 +14,9 @@ createRoot(root).render(
     <HelmetProvider>
       <BrowserRouter>
         <I18nProvider>
-          <App />
+          <TimezoneProvider>
+            <App />
+          </TimezoneProvider>
         </I18nProvider>
       </BrowserRouter>
     </HelmetProvider>
