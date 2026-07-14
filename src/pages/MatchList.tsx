@@ -113,8 +113,9 @@ export default function MatchList() {
   useEffect(() => {
     const key = `${selectedDate}:${statusFilter}`;
     const unsub = api.subscribe((state) => {
-      if (state.lists[key]) {
-        setMatches(state.lists[key]);
+      const list = state.lists[key];
+      if (list && list.length > 0) {
+        setMatches(list);
         setLoading(false);
         setError(null);
       }
@@ -189,6 +190,16 @@ export default function MatchList() {
         <span className="text-[13px] text-text-muted bg-surface-muted px-2.5 py-1 rounded-xl">
           {t("count", { n: matches.length })}
         </span>
+        <select
+          value={timezone}
+          onChange={(e) => setTimezone(e.target.value)}
+          className="text-xs bg-surface-muted text-text-primary border border-border rounded-md px-2.5 py-1.5 outline-none cursor-pointer max-w-[180px]"
+          title={t("timezone")}
+        >
+          {TIMEZONE_OPTIONS.map((tz) => (
+            <option key={tz} value={tz}>{tz}</option>
+          ))}
+        </select>
       </div>
 
       {/* Date bar — hidden for Live */}
@@ -239,16 +250,6 @@ export default function MatchList() {
           <option value="league">{t("groupBy.league")}</option>
           <option value="country">{t("groupBy.country")}</option>
         </select>
-        <select
-          value={timezone}
-          onChange={(e) => setTimezone(e.target.value)}
-          className="text-xs bg-surface-muted text-text-primary border border-border rounded-md px-2.5 py-1.5 outline-none cursor-pointer max-w-[180px]"
-          title={t("timezone")}
-        >
-          {TIMEZONE_OPTIONS.map((tz) => (
-            <option key={tz} value={tz}>{tz}</option>
-          ))}
-        </select>
       </div>
 
       {/* Loading skeleton */}
@@ -269,6 +270,11 @@ export default function MatchList() {
 
       {/* Error */}
       {error && <div className="text-center py-16 text-[#e53935] text-base">{t("error")}: {error}</div>}
+
+      {/* Empty state */}
+      {!loading && !error && grouped.length === 0 && (
+        <div className="text-center py-16 text-text-muted text-sm">No matches found for this date</div>
+      )}
 
       {/* Match list */}
       {!loading && !error && grouped.map(([group, list]) => (
