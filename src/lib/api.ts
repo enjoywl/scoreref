@@ -1,6 +1,7 @@
 export interface MatchListItem {
   mid: string; cty: string; tnm: string; sts: number;
-  sc: number; hnm: string; anm: string; hsc: number; asc: number;
+  sc: number; st?: string; sd?: string;
+  hnm: string; anm: string; hsc: number; asc: number;
   hs1: number; as1: number; hid: number; aid: number; snm: string; vnm?: string;
   tid?: number;
 }
@@ -50,6 +51,8 @@ function mapMatch(m: Record<string, any>): MatchListItem {
     tnm: m.tnm || "",
     sts: m.sts || 0,
     sc: m.sc || 0,
+    st: m.st,
+    sd: m.sd,
     hnm: m.hnm || "",
     anm: m.anm || "",
     hsc: m.hsc ?? 0,

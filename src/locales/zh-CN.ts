@@ -5,6 +5,7 @@ export default {
   groupBy: {
     league: "按联赛",
     country: "按国家",
+    time: "按时间",
   },
   status: {
     all: "全部",

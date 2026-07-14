@@ -5,6 +5,7 @@ import { useI18n } from "../locales";
 import { api, type MatchListItem } from "../lib/api";
 import { matchSlug } from "../lib/slug";
 import { useTimezone, getDateFields, formatKickoffTime, formatDateISO, TIMEZONE_OPTIONS } from "../lib/timezone";
+import { TeamAvatar, LeagueAvatar } from "../components/Avatar";
 
 function getWeekday(day: number, t: (k: string) => string) {
   return t("weekdays." + day);
@@ -39,14 +40,6 @@ function formatKickoff(ts: number, tz: string) {
   return formatKickoffTime(ts, tz);
 }
 
-function leagueLogo(tid?: number): string {
-  return tid ? `/v1/image/league/${tid}.png` : "";
-}
-
-function teamLogo(teamId: number): string {
-  return teamId ? `/v1/image/team/${teamId}.png` : "";
-}
-
 export default function MatchList() {
   const { t } = useI18n();
   const { timezone, setTimezone } = useTimezone();
@@ -58,12 +51,12 @@ export default function MatchList() {
 
   const today = useMemo(() => formatDateISO(new Date(), timezone), [timezone]);
 
-  const groupBy = (searchParams.get("groupBy") as "league" | "country") || "league";
+  const groupBy = (searchParams.get("groupBy") as "league" | "country" | "time") || "league";
   const statusFilter = searchParams.has("status") ? searchParams.get("status")! : "1";
   const dateOptions = useMemo(() => buildDateOptions(statusFilter, t, timezone), [statusFilter, t, timezone]);
   const selectedDate = statusFilter === "1" ? today : (searchParams.get("date") || today);
 
-  function setGroupBy(val: "league" | "country") {
+  function setGroupBy(val: "league" | "country" | "time") {
     setSearchParams(prev => { prev.set("groupBy", val); return prev; });
   }
   function setStatusFilter(val: string) {
@@ -124,31 +117,116 @@ export default function MatchList() {
   }, [selectedDate, statusFilter]);
 
   const grouped = useMemo(() => {
+    const nowSec = Math.floor(Date.now() / 1000);
+    const filtered = matches.filter((m) => {
+      // Drop not-started matches 30+ min past scheduled kickoff
+      if (m.sc === 0 && nowSec - m.sts > 1800) return false;
+      // Drop postponed / delayed
+      if (m.sc === 60 || m.sc === 61) return false;
+      return true;
+    });
+
+    // By time: flat list sorted globally
+    if (groupBy === "time") {
+      const sorted = [...filtered].sort((a, b) => a.sts - b.sts);
+      return sorted.length > 0 ? [["", sorted]] as [string, MatchListItem[]][] : [];
+    }
+
     const map: Record<string, MatchListItem[]> = {};
-    matches.forEach((m) => {
+    filtered.forEach((m) => {
       const key = groupBy === "league" ? m.tnm : m.cty;
       (map[key] ||= []).push(m);
     });
     for (const list of Object.values(map)) {
       list.sort((a, b) => a.sts - b.sts);
     }
-    return Object.entries(map);
+    return Object.entries(map).sort(([, a], [, b]) => (a[0]?.sts ?? 0) - (b[0]?.sts ?? 0));
   }, [matches, groupBy]);
 
   function getMatchTime(m: MatchListItem) {
-    if (m.sc >= 1 && m.sc < 100 && m.sc !== 31) {
-      const elapsed = Math.floor((Date.now() - m.sts * 1000) / 60000);
-      return Math.max(0, elapsed) + "'";
+    const sc = m.sc;
+    const nowSec = Math.floor(Date.now() / 1000);
+
+    // Not started — show kickoff time only
+    if (sc === 0) return "";
+
+    // Postponed / Delayed
+    if (sc === 60) return "Postponed";
+    if (sc === 61) return "Delayed";
+
+    // Canceled / Abandoned / Walkover / Retired
+    if (sc === 70) return "Canceled";
+    if (sc === 90) return "Abandoned";
+    if (sc === 91) return "Walkover";
+    if (sc === 92) return "Retired";
+    if (sc === 93) return "Removed";
+    if (sc === 97 || sc === 98) return "Defaulted";
+
+    // Interrupted / Suspended
+    if (sc === 80) return "Interrupted";
+    if (sc === 81) return "Suspended";
+
+    // Halftime / ET halftime
+    if (sc === 31) return t("match.ht");
+    if (sc === 33) return "ET HT";
+
+    // Awaiting extra time / penalties
+    if (sc === 32) return "Awaiting ET";
+    if (sc === 34) return "Penalties";
+    if (sc === 50) return "Penalties";
+
+    // Finished
+    if (sc >= 100 && sc < 110) return t("match.ft");
+    if (sc === 110) return "AET";
+    if (sc === 120) return "AP";
+
+    // Live — compute clock
+    if (sc >= 1 && sc < 100) {
+      // First half / period
+      if (sc === 1 || sc === 6 || sc === 20) {
+        const elapsed = Math.max(0, Math.floor((nowSec - m.sts) / 60));
+        if (elapsed <= 45) return elapsed + "'";
+        return "45+" + (elapsed - 45) + "'";
+      }
+      // Second half / period
+      if (sc === 2 || sc === 7) {
+        const secondHalfStart = m.sts + 45 * 60 + 15 * 60;
+        const halfElapsed = Math.max(0, Math.floor((nowSec - secondHalfStart) / 60));
+        const total = 45 + halfElapsed;
+        if (halfElapsed <= 45) return total + "'";
+        return "90+" + (halfElapsed - 45) + "'";
+      }
+      // Extra periods / other live states
+      const elapsed = Math.max(0, Math.floor((nowSec - m.sts) / 60));
+      return elapsed + "'";
     }
-    if (m.sc === 31) return t("match.ht");
-    if (m.sc >= 100) return t("match.ft");
-    return t("match.unknown");
+
+    return m.sd || m.st || "";
+  }
+
+  function badgeClass(sc: number): string {
+    // Live in progress (exclude breaks and awaiting states)
+    if (sc >= 1 && sc <= 59 && sc !== 31 && sc !== 32 && sc !== 33 && sc !== 34) return "bg-accent text-white animate-pulse-ring";
+    if (sc === 80 || sc === 81) return "bg-accent text-white animate-pulse-ring";
+    // HT / ET HT
+    if (sc === 31 || sc === 33) return "bg-[#e6a23c] text-white";
+    // Finished
+    if (sc >= 100) return "bg-surface-alt text-text-muted";
+    // Postponed / Delayed
+    if (sc === 60 || sc === 61) return "bg-[#ff9800] text-white";
+    // Canceled / Abandoned
+    if (sc === 70 || (sc >= 90 && sc <= 98)) return "bg-[#e53935] text-white";
+    // Not started / default
+    return "bg-surface-alt text-text-muted";
   }
 
   function statusBorder(sc: number): string {
-    if (sc >= 1 && sc < 100 && sc !== 31) return "live";
-    if (sc === 31) return "ht";
+    if (sc === 0 || sc === 60 || sc === 61) return "def";
+    if (sc === 70 || (sc >= 90 && sc <= 98)) return "cancel";
+    if (sc === 80 || sc === 81) return "live";
+    if (sc === 31 || sc === 33) return "ht";
     if (sc >= 100) return "ft";
+    if (sc >= 1 && sc < 100) return "live";
     return "def";
   }
 
@@ -157,6 +235,7 @@ export default function MatchList() {
     ht: "border-l-[#e6a23c]",
     ft: "border-l-[#555] dark:border-l-[#555] border-l-[#ccc]",
     def: "border-l-[#2a2a2a] dark:border-l-[#2a2a2a] border-l-[#e8e8e8]",
+    cancel: "border-l-[#e53935]",
   };
 
   return (
@@ -249,6 +328,7 @@ export default function MatchList() {
         >
           <option value="league">{t("groupBy.league")}</option>
           <option value="country">{t("groupBy.country")}</option>
+          <option value="time">{t("groupBy.time")}</option>
         </select>
       </div>
 
@@ -278,13 +358,14 @@ export default function MatchList() {
 
       {/* Match list */}
       {!loading && !error && grouped.map(([group, list]) => (
-        <section key={group} className="mb-[18px]">
-          <h2 className="text-[15px] font-semibold text-text-secondary mb-2.5 flex items-center gap-2">
-            {list[0]?.tid && (
-              <img src={leagueLogo(list[0].tid)} alt="" className="w-[22px] h-[22px] object-contain rounded" loading="lazy" />
-            )}
-            {group}
-          </h2>
+        <section key={group || "_time"} className="mb-[18px]">
+          {groupBy !== "time" && (
+            <h2 className="text-[15px] font-semibold text-text-secondary mb-2.5 flex items-center gap-2">
+              <LeagueAvatar id={list[0]?.tid} name={group} className="w-[22px] h-[22px] object-contain rounded shrink-0" />
+              {group}
+              <span className="text-[11px] text-text-muted font-normal ml-auto">{formatKickoff(list[0].sts, timezone)}</span>
+            </h2>
+          )}
 
           <div className="flex flex-col gap-1.5">
             {list.map((m) => (
@@ -298,12 +379,7 @@ export default function MatchList() {
                   <div className="flex flex-col items-end gap-1 shrink-0 min-w-[42px] sm:min-w-[55px]">
                     <span className="text-[11px] sm:text-xs text-text-secondary tabular-nums">{formatKickoff(m.sts, timezone)}</span>
                     <span
-                      className={`text-[10px] sm:text-[11px] font-bold px-1.5 sm:px-2 py-0.5 rounded-[10px]
-                        ${m.sc >= 1 && m.sc < 100 && m.sc !== 31 ? "bg-accent text-white animate-pulse-ring" : ""}
-                        ${m.sc === 31 ? "bg-[#e6a23c] text-white" : ""}
-                        ${m.sc === 0 ? "bg-surface-alt text-text-muted" : ""}
-                        ${m.sc >= 100 ? "bg-surface-alt text-text-muted" : ""}
-                      `}
+                      className={`text-[10px] sm:text-[11px] font-bold px-1.5 sm:px-2 py-0.5 rounded-[10px] ${badgeClass(m.sc)}`}
                     >
                       {getMatchTime(m)}
                     </span>
@@ -311,21 +387,27 @@ export default function MatchList() {
 
                   {/* Home team */}
                   <div className="flex-1 flex items-center justify-end gap-1.5 sm:gap-2.5 text-right min-w-0">
-                    <img src={teamLogo(m.hid)} alt={m.hnm} className="w-6 h-6 sm:w-7 sm:h-7 object-contain rounded-full bg-surface-alt shrink-0" loading="lazy" />
+                    <TeamAvatar id={m.hid} name={m.hnm} className="w-6 h-6 sm:w-7 sm:h-7 object-contain rounded-full shrink-0" />
                     <span className="text-[12px] sm:text-[13px] font-medium text-text-primary max-w-[100px] sm:max-w-[140px] truncate">{m.hnm}</span>
                   </div>
 
                   {/* Score */}
                   <div className="flex flex-col items-center min-w-[60px] sm:min-w-[70px] shrink-0">
-                    <span className="text-lg sm:text-xl font-extrabold text-text-primary tracking-[2px] tabular-nums">{m.hsc} - {m.asc}</span>
-                    {m.sc >= 31 && (
-                      <span className="text-[10px] sm:text-[11px] text-text-muted -mt-0.5">({m.hs1} - {m.as1})</span>
+                    {m.sc === 0 || m.sc === 60 || m.sc === 61 ? (
+                      <span className="text-sm font-semibold text-text-muted">vs</span>
+                    ) : (
+                      <>
+                        <span className="text-lg sm:text-xl font-extrabold text-text-primary tracking-[2px] tabular-nums">{m.hsc} - {m.asc}</span>
+                        {m.sc >= 31 && (
+                          <span className="text-[10px] sm:text-[11px] text-text-muted -mt-0.5">({m.hs1} - {m.as1})</span>
+                        )}
+                      </>
                     )}
                   </div>
 
                   {/* Away team */}
                   <div className="flex-1 flex items-center gap-1.5 sm:gap-2.5 min-w-0">
-                    <img src={teamLogo(m.aid)} alt={m.anm} className="w-6 h-6 sm:w-7 sm:h-7 object-contain rounded-full bg-surface-alt shrink-0" loading="lazy" />
+                    <TeamAvatar id={m.aid} name={m.anm} className="w-6 h-6 sm:w-7 sm:h-7 object-contain rounded-full shrink-0" />
                     <span className="text-[12px] sm:text-[13px] font-medium text-text-primary max-w-[100px] sm:max-w-[140px] truncate">{m.anm}</span>
                   </div>
                 </div>

@@ -5,6 +5,7 @@ export default {
   groupBy: {
     league: "By League",
     country: "By Country",
+    time: "By Time",
   },
   status: {
     all: "All",

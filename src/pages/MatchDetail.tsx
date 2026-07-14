@@ -5,10 +5,13 @@ import { useI18n } from "../locales";
 import { api } from "../lib/api";
 import { matchSlug } from "../lib/slug";
 import { useTimezone, formatKickoffTime, formatDateShort } from "../lib/timezone";
+import { TeamAvatar, LeagueAvatar } from "../components/Avatar";
+import DrawPitch from "../components/DrawPitch";
 
 /* ---- Types ---- */
 interface MatchInfo {
-  mid: string; tnm: string; sts: number; sc: number;
+  mid: string; tnm: string; sts: number; sc: number; cps?: number;
+  ij1?: number; ij2?: number; ij3?: number; ij4?: number;
   hnm: string; anm: string; hsc: number; asc: number;
   hs1: number; as1: number; snm: string; rnm: string;
   vnm: string; rfn?: string; grp?: string;
@@ -28,9 +31,7 @@ interface Incident {
 
 interface CommentaryItem { tx: string; tp: string; ih: boolean; sq: number; pnm?: string; }
 
-interface LineupPlayer { nm: string; sn: string; sh: number; pos: string; sub: boolean; cap?: boolean; }
-
-interface PositionedPlayer extends LineupPlayer { _x: number; _y: number; }
+interface LineupPlayer { nm: string; sn: string; sh: number; pos: string; sub: boolean; cap?: boolean; pid?: number; age?: number; }
 
 interface StatItem { k: string; nm: string; hn: number; an: number; hv: string; av: string; rt: number; }
 
@@ -61,49 +62,6 @@ function getIncidentIcon(tp: string, cl?: string) {
   if (t === "ingamepenalty" && cl === "scored") return { icon: "\u26BD", cls: "penalty" };
   if (t === "ingamepenalty") return { icon: "\u26BD", cls: "penalty" };
   return { icon: "\u25CF", cls: "other" };
-}
-
-function getPositionedPlayers(players: LineupPlayer[], side: "home" | "away"): PositionedPlayer[] {
-  const field = players.filter(p => !p.sub);
-  const rows: Record<number, LineupPlayer[]> = { 0: [], 1: [], 2: [], 3: [] };
-  for (const p of field) {
-    const ch = (p.pos || "").toUpperCase().charAt(0);
-    let row = 2;
-    if (ch === "G") row = 0;
-    else if (ch === "D") row = 1;
-    else if (ch === "M") row = 2;
-    else if (ch === "F" || ch === "S") row = 3;
-    rows[row].push(p);
-  }
-  for (const row of Object.values(rows)) {
-    row.sort((a, b) => {
-      const pa = (a.pos || "").toUpperCase();
-      const pb = (b.pos || "").toUpperCase();
-      const rank = (s: string) => s.includes("L") ? 0 : s.includes("R") ? 2 : 1;
-      return rank(pa) - rank(pb);
-    });
-  }
-  const xByRow = side === "home"
-    ? [45, 170, 340, 475]
-    : [955, 830, 660, 525];
-  const yRange: Record<number, [number, number]> = {
-    0: [325, 325], 1: [105, 545], 2: [55, 595], 3: [140, 510],
-  };
-  const result: PositionedPlayer[] = [];
-  for (const [ri, rp] of Object.entries(rows)) {
-    const row = parseInt(ri);
-    const n = rp.length;
-    const [y0, y1] = yRange[row];
-    for (let i = 0; i < n; i++) {
-      const y = n === 1 ? (y0 + y1) / 2 : y0 + ((y1 - y0) * i) / (n - 1);
-      result.push({ ...rp[i], _x: xByRow[row], _y: Math.round(y) });
-    }
-  }
-  return result;
-}
-
-function getSubstitutes(players: LineupPlayer[]) {
-  return players.filter(p => p.sub);
 }
 
 /* ---- Match table (shared by H2H / team fixtures) ---- */
@@ -249,8 +207,8 @@ export default function MatchDetail() {
     fetchJSON(`/v1/api/match/${mid}/lineups`).then(d => {
       if (d) {
         setLineups({
-          home: (d.hm?.pl || []).map((p: Record<string, unknown>) => ({ nm: p.nm, sn: p.sn, sh: p.sh, pos: p.pos, sub: p.sub, cap: p.cap } as LineupPlayer)),
-          away: (d.aw?.pl || []).map((p: Record<string, unknown>) => ({ nm: p.nm, sn: p.sn, sh: p.sh, pos: p.pos, sub: p.sub, cap: p.cap } as LineupPlayer)),
+          home: (d.hm?.pl || []).map((p: Record<string, unknown>) => ({ nm: p.nm, sn: p.sn, sh: p.sh, pos: p.pos, sub: p.sub, cap: p.cap, pid: p.pid, age: p.age } as LineupPlayer)),
+          away: (d.aw?.pl || []).map((p: Record<string, unknown>) => ({ nm: p.nm, sn: p.sn, sh: p.sh, pos: p.pos, sub: p.sub, cap: p.cap, pid: p.pid, age: p.age } as LineupPlayer)),
           hform: d.hm?.fm || "", aform: d.aw?.fm || "",
         });
       }
@@ -303,19 +261,79 @@ export default function MatchDetail() {
 
   const matchTime = useMemo(() => {
     if (!info) return "";
-    if (info.sc >= 1 && info.sc < 100 && info.sc !== 31) {
-      const elapsed = Math.floor((Date.now() - info.sts * 1000) / 60000);
-      return Math.max(0, elapsed) + "'";
+    const sc = info.sc;
+    const nowSec = Math.floor(Date.now() / 1000);
+
+    // Not started
+    if (sc === 0) return "";
+
+    // Postponed / Delayed
+    if (sc === 60) return "Postponed";
+    if (sc === 61) return "Delayed";
+
+    // Canceled / Abandoned
+    if (sc === 70) return "Canceled";
+    if (sc === 90) return "Abandoned";
+    if (sc === 91) return "Walkover";
+    if (sc === 92) return "Retired";
+    if (sc === 93) return "Removed";
+    if (sc === 97 || sc === 98) return "Defaulted";
+
+    // Interrupted / Suspended
+    if (sc === 80) return "Interrupted";
+    if (sc === 81) return "Suspended";
+
+    // Breaks
+    if (sc === 31) return t("match.ht");
+    if (sc === 33) return "ET HT";
+    if (sc === 32) return "Awaiting ET";
+    if (sc === 34) return "Awaiting Penalties";
+    if (sc === 50) return "Penalties";
+
+    // Finished
+    if (sc >= 100 && sc < 110) return t("match.ft");
+    if (sc === 110) return "AET";
+    if (sc === 120) return "AP";
+
+    // Live — use cps for accurate clock, fallback to sts
+    if (sc >= 1 && sc < 100) {
+      const periodStart = info.cps ?? info.sts;
+      const elapsed = Math.max(0, Math.floor((nowSec - periodStart) / 60));
+
+      // First half (sc=1,6,20)
+      if (sc === 1 || sc === 6 || sc === 20) {
+        if (elapsed <= 45) return elapsed + "'";
+        return "45+" + (elapsed - 45) + "'";
+      }
+      // Second half (sc=2,7)
+      if (sc === 2 || sc === 7) {
+        if (elapsed <= 45) return (45 + elapsed) + "'";
+        return "90+" + (elapsed - 45) + "'";
+      }
+      // Extra periods or generic live
+      return elapsed + "'";
     }
-    if (info.sc === 31) return t("match.ht");
-    if (info.sc >= 100) return t("match.ft");
-    return "";
+
+    return info.sd || info.st || "";
   }, [info, t]);
 
   const allStats = useMemo(() => stats.find(s => s.pr === "ALL") || stats[0], [stats]);
 
-  const isLive = info?.sc != null && info.sc >= 1 && info.sc < 100 && info.sc !== 31;
-  const isHT = info?.sc === 31;
+  const isLive = (() => {
+    const sc = info?.sc;
+    if (sc == null) return false;
+    if (sc <= 0) return false;
+    if (sc >= 100) return false;
+    // Exclude breaks, awaiting states, penalties (no running clock)
+    if ([31, 32, 33, 34, 50].includes(sc)) return false;
+    // Exclude postponed/delayed
+    if (sc === 60 || sc === 61) return false;
+    // Exclude canceled/abandoned
+    if (sc === 70 || (sc >= 90 && sc <= 98)) return false;
+    // Interrupted/suspended still count as live
+    return true;
+  })();
+  const isHT = info?.sc === 31 || info?.sc === 33;
   const heroGradient = isLive
     ? "bg-gradient-to-br from-[#0d47a1]/35 via-[#1565C0]/15 to-[#0d47a1]/35 border-[#4fc3f7]/25"
     : isHT
@@ -375,7 +393,7 @@ export default function MatchDetail() {
                 &larr; Back
               </button>
               <span className="flex-1 text-center text-[13px] text-text-secondary font-medium flex items-center justify-center gap-1.5">
-                {info.tid && <img src={`/v1/image/league/${info.tid}.png`} alt="" className="w-[18px] h-[18px] object-contain rounded" />}
+                <LeagueAvatar id={info.tid} name={info.tnm} className="w-[18px] h-[18px] object-contain rounded shrink-0" />
                 {info.tnm}
               </span>
               {info.rnm && <span className="text-xs text-text-muted shrink-0">{info.rnm}</span>}
@@ -385,7 +403,7 @@ export default function MatchDetail() {
             <div className="flex items-center justify-between gap-3 sm:gap-5 mb-5">
               <div className="flex-1 flex flex-col items-center gap-2 sm:gap-2.5 text-center min-w-0">
                 <div className="w-[56px] h-[56px] sm:w-[72px] sm:h-[72px] rounded-full bg-[#f5f5f5] dark:bg-white/5 border-2 border-[#e8e8e8] dark:border-white/10 flex items-center justify-center">
-                  <img src={`/v1/image/team/${info.hid}.png`} alt={info.hnm} className="w-[40px] h-[40px] sm:w-[52px] sm:h-[52px] object-contain" />
+                  <TeamAvatar id={info.hid} name={info.hnm} className="w-[40px] h-[40px] sm:w-[52px] sm:h-[52px] object-contain" textClass="text-[14px] sm:text-[18px]" />
                 </div>
                 <span className="text-[13px] sm:text-[15px] font-bold text-text-primary max-w-[100px] sm:max-w-[180px] truncate">{info.hnm}</span>
               </div>
@@ -402,7 +420,7 @@ export default function MatchDetail() {
               </div>
               <div className="flex-1 flex flex-col items-center gap-2 sm:gap-2.5 text-center min-w-0">
                 <div className="w-[56px] h-[56px] sm:w-[72px] sm:h-[72px] rounded-full bg-[#f5f5f5] dark:bg-white/5 border-2 border-[#e8e8e8] dark:border-white/10 flex items-center justify-center">
-                  <img src={`/v1/image/team/${info.aid}.png`} alt={info.anm} className="w-[40px] h-[40px] sm:w-[52px] sm:h-[52px] object-contain" />
+                  <TeamAvatar id={info.aid} name={info.anm} className="w-[40px] h-[40px] sm:w-[52px] sm:h-[52px] object-contain" textClass="text-[14px] sm:text-[18px]" />
                 </div>
                 <span className="text-[13px] sm:text-[15px] font-bold text-text-primary max-w-[100px] sm:max-w-[180px] truncate">{info.anm}</span>
               </div>
@@ -634,87 +652,65 @@ export default function MatchDetail() {
             !fetched.lineups ? <div className="flex justify-center py-16"><div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" /></div>
             : !lineups ? <div className="text-center py-16 text-text-muted">No lineup data</div>
             : (
-              <div className="flex flex-col gap-4">
-                {/* Team headers */}
-                <div className="flex justify-between items-center max-w-[700px] mx-auto w-full">
-                  <div className="flex flex-col items-center gap-1">
-                    <span className="text-sm font-bold text-text-primary">{info.hnm}</span>
-                    {lineups.hform && <span className="text-xs text-accent font-semibold bg-accent/10 px-2.5 py-0.5 rounded">{lineups.hform}</span>}
+              <DrawPitch
+                homePlayers={lineups.home}
+                awayPlayers={lineups.away}
+                homeFormation={lineups.hform}
+                awayFormation={lineups.aform}
+                homeName={info.hnm}
+                awayName={info.anm}
+                substitutes={
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-[900px] mx-auto w-full">
+                    {([info.hnm, info.anm] as const).map((teamName, ti) => {
+                      const subs = (ti === 0 ? lineups.home : lineups.away).filter(p => p.sub);
+                      const label = `${teamName} — Substitutes`;
+                      return (
+                        <div key={ti}>
+                          <div className="text-xs text-text-secondary font-semibold mb-2">{label}</div>
+                          <div className="flex flex-col gap-1.5">
+                            {subs.map(p => (
+                              <div key={(ti === 0 ? "hs" : "as") + p.sh}
+                                className="flex items-center gap-2.5 bg-surface rounded-lg px-3 py-2 border border-border-light">
+                                {/* Photo */}
+                                <div className="w-7 h-7 rounded-full bg-surface-alt flex items-center justify-center shrink-0 overflow-hidden">
+                                  {p.pid ? (
+                                    <img
+                                      src={`/v1/image/player/${p.pid}.png`}
+                                      alt={p.nm}
+                                      className="w-full h-full object-cover"
+                                      loading="lazy"
+                                      onError={(e) => {
+                                        (e.target as HTMLImageElement).style.display = "none";
+                                        (e.target as HTMLImageElement).nextElementSibling?.classList.remove("hidden");
+                                      }}
+                                    />
+                                  ) : null}
+                                  <span className={`text-[10px] font-bold text-text-muted uppercase ${p.pid ? "hidden" : ""}`}>
+                                    {p.sn}
+                                  </span>
+                                </div>
+                                {/* Info */}
+                                <div className="flex-1 min-w-0 flex items-center gap-1.5">
+                                  <span className="text-[10px] font-bold text-text-muted tabular-nums w-5 text-right shrink-0">#{p.sh}</span>
+                                  <span className="text-[12px] font-medium text-text-primary truncate">{p.nm}</span>
+                                </div>
+                                {/* Position */}
+                                <span className="text-[9px] font-semibold text-text-muted bg-surface-alt px-1.5 py-0.5 rounded shrink-0 uppercase">
+                                  {typeof p.pos === "string" && p.pos ? p.pos : "-"}
+                                </span>
+                                {/* Age */}
+                                {p.age != null && (
+                                  <span className="text-[10px] text-text-muted shrink-0 w-6 text-right tabular-nums">{p.age}</span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                  <div className="flex flex-col items-center gap-1">
-                    <span className="text-sm font-bold text-text-primary">{info.anm}</span>
-                    {lineups.aform && <span className="text-xs text-accent font-semibold bg-accent/10 px-2.5 py-0.5 rounded">{lineups.aform}</span>}
-                  </div>
-                </div>
-
-                {/* SVG Pitch */}
-                <div className="max-w-[700px] mx-auto w-full">
-                  <svg viewBox="0 0 1000 650" className="block w-full h-auto rounded-lg" xmlns="http://www.w3.org/2000/svg">
-                    <defs>
-                      <pattern id="grassStripes" patternUnits="userSpaceOnUse" width="50" height="650">
-                        <rect x="0" y="0" width="25" height="650" fill="rgba(255,255,255,0.025)" />
-                      </pattern>
-                    </defs>
-                    <rect x="0" y="0" width="1000" height="650" rx="8" fill="#388E3C" />
-                    <rect x="0" y="0" width="1000" height="650" rx="8" fill="url(#grassStripes)" />
-                    <rect x="6" y="6" width="988" height="638" rx="4" fill="none" stroke="rgba(255,255,255,0.8)" strokeWidth="2.5" />
-                    <line x1="500" y1="6" x2="500" y2="644" stroke="rgba(255,255,255,0.8)" strokeWidth="2.5" />
-                    <circle cx="500" cy="325" r="90" fill="none" stroke="rgba(255,255,255,0.8)" strokeWidth="2" />
-                    <circle cx="500" cy="325" r="4" fill="rgba(255,255,255,0.9)" />
-                    <rect x="6" y="130" width="160" height="390" fill="none" stroke="rgba(255,255,255,0.8)" strokeWidth="2" />
-                    <rect x="6" y="222" width="55" height="206" fill="none" stroke="rgba(255,255,255,0.65)" strokeWidth="1.5" />
-                    <circle cx="115" cy="325" r="4" fill="rgba(255,255,255,0.9)" />
-                    <path d="M 166 285 A 90 90 0 0 1 166 365" fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth="1.5" />
-                    <rect x="834" y="130" width="160" height="390" fill="none" stroke="rgba(255,255,255,0.8)" strokeWidth="2" />
-                    <rect x="939" y="222" width="55" height="206" fill="none" stroke="rgba(255,255,255,0.65)" strokeWidth="1.5" />
-                    <circle cx="885" cy="325" r="4" fill="rgba(255,255,255,0.9)" />
-                    <path d="M 834 285 A 90 90 0 0 0 834 365" fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth="1.5" />
-                    <rect x="0" y="278" width="14" height="94" rx="2" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.7)" strokeWidth="2" />
-                    <rect x="986" y="278" width="14" height="94" rx="2" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.7)" strokeWidth="2" />
-                    <path d="M 40 6 A 34 34 0 0 0 6 40" fill="none" stroke="rgba(255,255,255,0.8)" strokeWidth="2" />
-                    <path d="M 40 644 A 34 34 0 0 1 6 610" fill="none" stroke="rgba(255,255,255,0.8)" strokeWidth="2" />
-                    <path d="M 960 6 A 34 34 0 0 1 994 40" fill="none" stroke="rgba(255,255,255,0.8)" strokeWidth="2" />
-                    <path d="M 960 644 A 34 34 0 0 0 994 610" fill="none" stroke="rgba(255,255,255,0.8)" strokeWidth="2" />
-
-                    {getPositionedPlayers(lineups.home, "home").map(p => (
-                      <g key={"hp" + p.sh}>
-                        <circle cx={p._x} cy={p._y} r="13" fill="#1565C0" stroke="#fff" strokeWidth="2" />
-                        <text x={p._x} y={p._y + 1} textAnchor="middle" fontSize="9" fontWeight="700" fill="#fff" style={{ fontVariantNumeric: "tabular-nums" }}>{p.sh}</text>
-                        <text x={p._x} y={p._y + 26} textAnchor="middle" fontSize="7.5" fill="#fff" style={{ textShadow: "0 1px 2px rgba(0,0,0,0.8)" }}>{p.sn}</text>
-                        {p.cap && <polygon points={`${p._x - 10},${p._y - 4} ${p._x + 10},${p._y - 4} ${p._x},${p._y - 11}`} fill="#FFC107" />}
-                      </g>
-                    ))}
-                    {getPositionedPlayers(lineups.away, "away").map(p => (
-                      <g key={"ap" + p.sh}>
-                        <circle cx={p._x} cy={p._y} r="13" fill="#C62828" stroke="#fff" strokeWidth="2" />
-                        <text x={p._x} y={p._y + 1} textAnchor="middle" fontSize="9" fontWeight="700" fill="#fff" style={{ fontVariantNumeric: "tabular-nums" }}>{p.sh}</text>
-                        <text x={p._x} y={p._y + 26} textAnchor="middle" fontSize="7.5" fill="#fff" style={{ textShadow: "0 1px 2px rgba(0,0,0,0.8)" }}>{p.sn}</text>
-                        {p.cap && <polygon points={`${p._x - 10},${p._y - 4} ${p._x + 10},${p._y - 4} ${p._x},${p._y - 11}`} fill="#FFC107" />}
-                      </g>
-                    ))}
-                  </svg>
-                </div>
-
-                {/* Substitutes */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <div className="text-xs text-text-secondary font-semibold mb-1.5">{info.hnm} — Substitutes</div>
-                    <div className="flex flex-wrap gap-1 p-2 bg-surface rounded-md">
-                      {getSubstitutes(lineups.home).map(p => (
-                        <span key={"hs" + p.sh} className="text-[11px] text-text-muted px-2 py-0.5 bg-surface-alt rounded">{p.sh} {p.nm}</span>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-text-secondary font-semibold mb-1.5">{info.anm} — Substitutes</div>
-                    <div className="flex flex-wrap gap-1 p-2 bg-surface rounded-md">
-                      {getSubstitutes(lineups.away).map(p => (
-                        <span key={"as" + p.sh} className="text-[11px] text-text-muted px-2 py-0.5 bg-surface-alt rounded">{p.sh} {p.nm}</span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
+                }
+              />
             )
           )}
 
