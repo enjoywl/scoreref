@@ -48,7 +48,7 @@ function mapMatch(m: Record<string, any>): MatchListItem {
   return {
     mid: m.mid,
     cty: m.cty || "",
-    tnm: m.tnm || "",
+    tnm: m.stnm || m.tnm || "",
     sts: m.sts || 0,
     sc: m.sc || 0,
     st: m.st,

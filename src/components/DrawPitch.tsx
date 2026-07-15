@@ -17,7 +17,8 @@ function parseFormation(fm?: string): number[] {
 }
 
 /** Position depth for sorting: lower = closer to own goal. */
-function posDepth(pos: string): number {
+function posDepth(pos?: string): number {
+  if (!pos) return 3; // default to midfield if position unknown
   const s = pos.toUpperCase();
   if (s.startsWith("G")) return 0;
   if (s.startsWith("D") && !s.includes("DM")) return 1;
