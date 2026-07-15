@@ -1,6 +1,7 @@
 import { useState } from "react";
 
-function abbr(name: string): string {
+function abbr(name?: string): string {
+  if (!name) return "??";
   const parts = name.split(/\s+/);
   if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   return name.slice(0, 2).toUpperCase();

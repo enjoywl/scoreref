@@ -279,10 +279,6 @@ export default function MatchDetail() {
     if (sc === 93) return "Removed";
     if (sc === 97 || sc === 98) return "Defaulted";
 
-    // Interrupted / Suspended
-    if (sc === 80) return "Interrupted";
-    if (sc === 81) return "Suspended";
-
     // Breaks
     if (sc === 31) return t("match.ht");
     if (sc === 33) return "ET HT";
@@ -360,9 +356,9 @@ export default function MatchDetail() {
         <>
           <Helmet>
             <title>{info.hnm} vs {info.anm} — ScoreRef</title>
-            <meta name="description" content={`${info.hnm} vs ${info.anm} — ${info.tnm}. Live score, match stats, incidents, lineups and H2H history.`} />
+            <meta name="description" content={`${info.hnm} vs ${info.anm} — ${(info.stnm || info.tnm)}. Live score, match stats, incidents, lineups and H2H history.`} />
             <meta property="og:title" content={`${info.hnm} vs ${info.anm} — ScoreRef`} />
-            <meta property="og:description" content={`${info.tnm} — ${info.hnm} ${info.hsc} - ${info.asc} ${info.anm}`} />
+            <meta property="og:description" content={`${(info.stnm || info.tnm)} — ${info.hnm} ${info.hsc} - ${info.asc} ${info.anm}`} />
             <meta property="og:type" content="article" />
             <script type="application/ld+json">
               {JSON.stringify({
@@ -393,8 +389,8 @@ export default function MatchDetail() {
                 &larr; Back
               </button>
               <span className="flex-1 text-center text-[13px] text-text-secondary font-medium flex items-center justify-center gap-1.5">
-                <LeagueAvatar id={info.tid} name={info.tnm} className="w-[18px] h-[18px] object-contain rounded shrink-0" />
-                {info.tnm}
+                <LeagueAvatar id={info.stid || info.tid} name={(info.stnm || info.tnm)} className="w-[18px] h-[18px] object-contain rounded shrink-0" />
+                {(info.stnm || info.tnm)}
               </span>
               {info.rnm && <span className="text-xs text-text-muted shrink-0">{info.rnm}</span>}
             </div>
@@ -633,12 +629,31 @@ export default function MatchDetail() {
                 {[1, 2, 3].map(i => <div key={i} className="h-4 bg-skeleton-from rounded animate-pulse" />)}
               </div>
             ) : commentary.length > 0 ? (
-              <div>
-                {commentary.map(c => (
-                  <div key={c.sq} className="flex items-start gap-2.5 py-1.5 border-b border-border-subtle text-[13px]">
-                    <span className="text-[11px] text-text-muted min-w-[40px] shrink-0">{c.tp}</span>
-                    {c.pnm && <span className="text-text-primary font-medium shrink-0">{c.pnm}</span>}
-                    <span className="text-text-muted">{c.tx}</span>
+              <div className="relative py-1 before:absolute before:left-[70px] before:top-2 before:bottom-2 before:w-px before:bg-border">
+                {commentary.map((c, i) => (
+                  <div
+                    key={c.sq}
+                    className={`flex items-start gap-3 px-2 py-3 relative group rounded-xl transition-colors hover:bg-accent/3 ${c.ih ? "" : ""}`}
+                  >
+                    {/* Time badge */}
+                    <span className="text-[11px] font-bold text-accent bg-accent/8 min-w-[54px] text-center shrink-0 mt-0.5 py-0.5 px-1.5 rounded-md tabular-nums">
+                      {c.tp}
+                    </span>
+
+                    {/* Timeline dot */}
+                    <div className={`w-2 h-2 rounded-full shrink-0 mt-1.5 relative z-10 ring-2 ring-surface ${c.pnm ? "bg-accent" : "bg-border"}`} />
+
+                    {/* Content */}
+                    <div className="flex-1 min-w-0">
+                      {c.pnm && (
+                        <span className="text-[13px] font-semibold text-text-primary">
+                          {c.pnm}
+                        </span>
+                      )}
+                      <p className={`text-[13px] leading-relaxed ${c.pnm ? "text-text-secondary mt-0.5" : "text-text-primary"}`}>
+                        {c.tx}
+                      </p>
+                    </div>
                   </div>
                 ))}
               </div>
