@@ -2,9 +2,11 @@ import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import AppRouter from "./router";
 import { useI18n } from "./locales";
+import { useTimezone, TIMEZONE_OPTIONS } from "./lib/timezone";
 
 export default function App() {
   const { t, locale, setLocale } = useI18n();
+  const { timezone, setTimezone } = useTimezone();
   const navigate = useNavigate();
   const [isDark, setIsDark] = useState(true);
 
@@ -38,6 +40,16 @@ export default function App() {
               </span>
             </div>
             <div className="flex items-center gap-1.5">
+              <select
+                value={timezone}
+                onChange={(e) => setTimezone(e.target.value)}
+                className="text-[11px] bg-transparent text-text-muted border border-border rounded px-1.5 py-0.5 outline-none cursor-pointer max-w-[140px]"
+                title={t("timezone")}
+              >
+                {TIMEZONE_OPTIONS.map((tz) => (
+                  <option key={tz} value={tz}>{tz}</option>
+                ))}
+              </select>
               <button
                 onClick={toggleTheme}
                 className="text-base text-text-muted hover:text-[#f4c542] px-1.5 py-0.5 rounded transition-colors cursor-pointer"

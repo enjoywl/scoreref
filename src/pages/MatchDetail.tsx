@@ -356,9 +356,9 @@ export default function MatchDetail() {
         <>
           <Helmet>
             <title>{info.hnm} vs {info.anm} — ScoreRef</title>
-            <meta name="description" content={`${info.hnm} vs ${info.anm} — ${(info.stnm || info.tnm)}. Live score, match stats, incidents, lineups and H2H history.`} />
+            <meta name="description" content={`${info.hnm} vs ${info.anm} — ${(info.tnm)}. Live score, match stats, incidents, lineups and H2H history.`} />
             <meta property="og:title" content={`${info.hnm} vs ${info.anm} — ScoreRef`} />
-            <meta property="og:description" content={`${(info.stnm || info.tnm)} — ${info.hnm} ${info.hsc} - ${info.asc} ${info.anm}`} />
+            <meta property="og:description" content={`${(info.tnm)} — ${info.hnm} ${info.hsc} - ${info.asc} ${info.anm}`} />
             <meta property="og:type" content="article" />
             <script type="application/ld+json">
               {JSON.stringify({
@@ -389,8 +389,8 @@ export default function MatchDetail() {
                 &larr; Back
               </button>
               <span className="flex-1 text-center text-[13px] text-text-secondary font-medium flex items-center justify-center gap-1.5">
-                <LeagueAvatar id={info.stid || info.tid} name={(info.stnm || info.tnm)} className="w-[18px] h-[18px] object-contain rounded shrink-0" />
-                {(info.stnm || info.tnm)}
+                <LeagueAvatar id={info.tid} name={(info.tnm)} className="w-[18px] h-[18px] object-contain rounded shrink-0" />
+                {(info.tnm)}
               </span>
               {info.rnm && <span className="text-xs text-text-muted shrink-0">{info.rnm}</span>}
             </div>
@@ -490,27 +490,38 @@ export default function MatchDetail() {
                 {[1, 2, 3].map(i => <div key={i} className="h-5 bg-skeleton-from rounded animate-pulse" />)}
               </div>
             ) : allStats ? (
-              <div className="flex flex-col gap-4">
-                {allStats.gr.map((g: { gn: string; si: StatItem[] }) => (
+              <div className="flex flex-col gap-5">
+                {allStats.gr.map((g: { gn: string; si: StatItem[] }) => {
+                  const groupKey = `statGroups.${g.gn}`;
+                  const groupNameT = t(groupKey);
+                  const groupName = groupNameT !== groupKey ? groupNameT : g.gn;
+                  return (
                   <div key={g.gn}>
-                    <div className="text-xs text-accent font-semibold mb-2 uppercase tracking-wide">{g.gn}</div>
+                    <div className="text-xs text-accent font-semibold mb-2 uppercase tracking-wide">{groupName}</div>
                     {g.si.map((it: StatItem) => {
                       const max = Math.max(it.hn, it.an);
                       const hPct = max ? Math.round((it.hn / max) * 100) : 0;
                       const aPct = max ? Math.round((it.an / max) * 100) : 0;
+                      const statKey = `stats.${it.k}`;
+                      const statNameT = t(statKey);
+                      const displayName = statNameT !== statKey ? statNameT : it.nm;
                       return (
-                        <div key={it.k || it.nm} className="flex items-center gap-2.5 py-1">
-                          <span className="text-sm font-bold text-[#1565C0] dark:text-[#64b5f6] text-right min-w-[30px] tabular-nums">{it.hv}</span>
-                          <div className="flex-1 h-1.5 bg-border-light rounded-sm flex gap-0.5 overflow-hidden">
-                            <div className="h-full bg-gradient-to-r from-[#1565C0] to-[#42a5f5] rounded-sm ml-auto transition-[width] duration-600" style={{ width: hPct + "%" }} />
-                            <div className="h-full bg-gradient-to-r from-[#ef5350] to-[#c62828] rounded-sm transition-[width] duration-600" style={{ width: aPct + "%" }} />
+                        <div key={it.k || it.nm} className="flex items-center gap-2.5 py-1.5">
+                          <span className="text-sm font-bold text-[#1565C0] dark:text-[#64b5f6] text-right min-w-[36px] tabular-nums">{it.hv}</span>
+                          <div className="flex-1 flex flex-col items-center gap-0.5 min-w-0">
+                            <span className="text-[11px] text-text-muted leading-tight text-center truncate max-w-full">{displayName}</span>
+                            <div className="w-full h-1.5 bg-border-light rounded-sm flex gap-0.5 overflow-hidden">
+                              <div className="h-full bg-gradient-to-r from-[#1565C0] to-[#42a5f5] rounded-sm ml-auto transition-[width] duration-600" style={{ width: hPct + "%" }} />
+                              <div className="h-full bg-gradient-to-r from-[#ef5350] to-[#c62828] rounded-sm transition-[width] duration-600" style={{ width: aPct + "%" }} />
+                            </div>
                           </div>
-                          <span className="text-sm font-bold text-[#c62828] dark:text-[#ef5350] text-left min-w-[30px] tabular-nums">{it.av}</span>
+                          <span className="text-sm font-bold text-[#c62828] dark:text-[#ef5350] text-left min-w-[36px] tabular-nums">{it.av}</span>
                         </div>
                       );
                     })}
                   </div>
-                ))}
+                );
+                })}
               </div>
             ) : (
               <div className="text-center py-16 text-text-muted">No stats available</div>
@@ -630,7 +641,7 @@ export default function MatchDetail() {
               </div>
             ) : commentary.length > 0 ? (
               <div className="relative py-1 before:absolute before:left-[70px] before:top-2 before:bottom-2 before:w-px before:bg-border">
-                {commentary.map((c, i) => (
+                {commentary.map((c) => (
                   <div
                     key={c.sq}
                     className={`flex items-start gap-3 px-2 py-3 relative group rounded-xl transition-colors hover:bg-accent/3 ${c.ih ? "" : ""}`}

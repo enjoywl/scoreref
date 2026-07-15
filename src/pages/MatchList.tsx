@@ -4,7 +4,7 @@ import { Helmet } from "react-helmet-async";
 import { useI18n } from "../locales";
 import { api, type MatchListItem } from "../lib/api";
 import { matchSlug } from "../lib/slug";
-import { useTimezone, getDateFields, formatKickoffTime, formatDateISO, TIMEZONE_OPTIONS } from "../lib/timezone";
+import { useTimezone, getDateFields, formatKickoffTime, formatDateISO } from "../lib/timezone";
 import { TeamAvatar, LeagueAvatar } from "../components/Avatar";
 
 function getWeekday(day: number, t: (k: string) => string) {
@@ -42,7 +42,7 @@ function formatKickoff(ts: number, tz: string) {
 
 export default function MatchList() {
   const { t } = useI18n();
-  const { timezone, setTimezone } = useTimezone();
+  const { timezone } = useTimezone();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [matches, setMatches] = useState<MatchListItem[]>([]);
@@ -52,6 +52,7 @@ export default function MatchList() {
   const today = useMemo(() => formatDateISO(new Date(), timezone), [timezone]);
 
   const groupBy = (searchParams.get("groupBy") as "league" | "country" | "time") || "league";
+  const leagueFilter = searchParams.get("league") || "all";
   const statusFilter = searchParams.has("status") ? searchParams.get("status")! : "1";
   const dateOptions = useMemo(() => buildDateOptions(statusFilter, t, timezone), [statusFilter, t, timezone]);
   const selectedDate = statusFilter === "1" ? today : (searchParams.get("date") || today);
@@ -70,6 +71,16 @@ export default function MatchList() {
   function setSelectedDate(val: string) {
     setSearchParams(prev => { if (val !== today) prev.set("date", val); else prev.delete("date"); return prev; });
   }
+  function setLeagueFilter(val: string) {
+    setSearchParams(prev => { if (val !== "all") prev.set("league", val); else prev.delete("league"); return prev; });
+  }
+
+  // Extract unique leagues from current matches
+  const leagues = useMemo(() => {
+    const set = new Set<string>();
+    matches.forEach(m => { if (m.tnm) set.add(m.tnm); });
+    return Array.from(set).sort();
+  }, [matches]);
 
   const fetchMatches = useCallback(async () => {
     const cached = api.getList(selectedDate, statusFilter);
@@ -123,6 +134,8 @@ export default function MatchList() {
       if (m.sc === 0 && nowSec - m.sts > 1800) return false;
       // Drop postponed / delayed
       if (m.sc === 60 || m.sc === 61) return false;
+      // League filter
+      if (leagueFilter !== "all" && m.tnm !== leagueFilter) return false;
       return true;
     });
 
@@ -141,7 +154,7 @@ export default function MatchList() {
       list.sort((a, b) => a.sts - b.sts);
     }
     return Object.entries(map).sort(([, a], [, b]) => (a[0]?.sts ?? 0) - (b[0]?.sts ?? 0));
-  }, [matches, groupBy]);
+  }, [matches, groupBy, leagueFilter]);
 
   function getMatchTime(m: MatchListItem) {
     const sc = m.sc;
@@ -269,16 +282,6 @@ export default function MatchList() {
         <span className="text-[13px] text-text-muted bg-surface-muted px-2.5 py-1 rounded-xl">
           {t("count", { n: matches.length })}
         </span>
-        <select
-          value={timezone}
-          onChange={(e) => setTimezone(e.target.value)}
-          className="text-xs bg-surface-muted text-text-primary border border-border rounded-md px-2.5 py-1.5 outline-none cursor-pointer max-w-[180px]"
-          title={t("timezone")}
-        >
-          {TIMEZONE_OPTIONS.map((tz) => (
-            <option key={tz} value={tz}>{tz}</option>
-          ))}
-        </select>
       </div>
 
       {/* Date bar — hidden for Live */}
@@ -329,6 +332,16 @@ export default function MatchList() {
           <option value="league">{t("groupBy.league")}</option>
           <option value="country">{t("groupBy.country")}</option>
           <option value="time">{t("groupBy.time")}</option>
+        </select>
+        <select
+          value={leagueFilter}
+          onChange={(e) => setLeagueFilter(e.target.value)}
+          className="text-xs bg-surface-muted text-text-primary border border-border rounded-md px-2.5 py-1.5 outline-none cursor-pointer max-w-[200px]"
+        >
+          <option value="all">All Leagues</option>
+          {leagues.map((l) => (
+            <option key={l} value={l}>{l}</option>
+          ))}
         </select>
       </div>
 
