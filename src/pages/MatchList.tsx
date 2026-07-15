@@ -150,6 +150,8 @@ export default function MatchList() {
       if (m.sc === 0 && nowSec - m.sts > 1800) return false;
       // Drop postponed / delayed
       if (m.sc === 60 || m.sc === 61) return false;
+      // Drop matches without tournament name
+      if (!m.tnm) return false;
       // League filter
       if (leagueFilter !== "all" && m.tnm !== leagueFilter) return false;
       return true;
