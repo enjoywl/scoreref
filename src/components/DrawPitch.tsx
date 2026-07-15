@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { useI18n } from "../locales";
 
 interface Player {
   nm: string; sn: string; sh: number; pos: string; sub: boolean; cap?: boolean; pid?: number; age?: number;
@@ -73,17 +74,11 @@ function layoutPlayers(players: Player[], side: "home" | "away", formation?: str
     return Math.round(osStart + (osEnd - osStart) * (ri - 1) / (osRows - 1));
   }
 
-  function rowYRange(ri: number): [number, number] {
-    if (ri === 0) return [340, 340]; // GK centered
-    // Single outfield row: narrow
-    if (osRows === 1) return [160, 520];
-    // Last outfield row (forwards): moderate spread
-    if (ri === totalRows - 1) return [140, 540];
-    // First outfield row (defenders): wide spread
-    if (ri === 1) return [100, 580];
-    // Middle rows: widest spread
-    return [60, 620];
-  }
+  const PITCH_H = 680;
+  const MARGIN = 55;
+  const maxN = Math.max(...rows.slice(1).map(r => r.length), 2); // max outfield players in a row
+  const fullWidth = PITCH_H - 2 * MARGIN;
+  const center = Math.round(PITCH_H / 2);
 
   const result: PositionedPlayer[] = [];
   for (let ri = 0; ri < totalRows; ri++) {
@@ -91,10 +86,16 @@ function layoutPlayers(players: Player[], side: "home" | "away", formation?: str
     const n = rp.length;
     if (n === 0) continue;
     const x = rowX(ri);
-    const [y0, y1] = rowYRange(ri);
     for (let i = 0; i < n; i++) {
-      const y = n === 1 ? (y0 + y1) / 2 : y0 + ((y1 - y0) * i) / (n - 1);
-      result.push({ ...rp[i], _x: x, _y: Math.round(y) });
+      let y: number;
+      if (n === 1 || maxN <= 1) {
+        y = center;
+      } else {
+        // Spread proportional to player count: 5 > 4 > 3 > 2
+        const width = (n - 1) / (maxN - 1) * fullWidth;
+        y = Math.round(center + width * (i / (n - 1) - 0.5));
+      }
+      result.push({ ...rp[i], _x: x, _y: y });
     }
   }
   return result;
@@ -104,37 +105,41 @@ function PlayerPhoto({ x, y, r, pid, name, fallback }: {
   x: number; y: number; r: number; pid?: number; name: string; fallback: string;
 }) {
   const [error, setError] = useState(false);
+  const clipId = `pc-${pid ?? 0}-${x}-${y}`;
 
   if (!pid || error) {
     return (
-      <text x={x} y={y + 1} textAnchor="middle" fontSize="14" fontWeight="700" fill="#fff">{fallback}</text>
+      <>
+        <circle cx={x} cy={y} r={r} fill="#2a2a3e" />
+        <circle cx={x} cy={y} r={r} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
+        <text x={x} y={y + 1} textAnchor="middle" fontSize="14" fontWeight="700" fill="rgba(255,255,255,0.6)">{fallback}</text>
+      </>
     );
   }
 
   return (
-    <foreignObject x={x - r} y={y - r} width={r * 2} height={r * 2}>
-      <div
-        style={{
-          width: "100%", height: "100%", borderRadius: "50%", overflow: "hidden",
-          display: "flex", alignItems: "center", justifyContent: "center", background: "#2a2a3e",
-        }}
-        title={name}
+    <>
+      <defs>
+        <clipPath id={clipId}>
+          <circle cx={x} cy={y} r={r} />
+        </clipPath>
+      </defs>
+      <image
+        href={`/v1/image/player/${pid}.png`}
+        x={x - r} y={y - r}
+        width={r * 2} height={r * 2}
+        clipPath={`url(#${clipId})`}
+        preserveAspectRatio="xMidYMid slice"
+        onError={() => setError(true)}
       >
-        <img
-          src={`/v1/image/player/${pid}.png`}
-          alt={name}
-          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-          onError={() => setError(true)}
-        />
-      </div>
-    </foreignObject>
+        <title>{name}</title>
+      </image>
+    </>
   );
 }
 
-function PlayerNode({ p, color, isHome }: { p: PositionedPlayer; color: string; isHome: boolean }) {
+function PlayerNode({ p, color, captainLabel }: { p: PositionedPlayer; color: string; isHome?: boolean; captainLabel: string }) {
   const r = 21;
-  const nameX = isHome ? p._x - 2 : p._x + 2;
-  const nameAnchor = isHome ? "end" : "start";
 
   return (
     <g>
@@ -147,16 +152,14 @@ function PlayerNode({ p, color, isHome }: { p: PositionedPlayer; color: string; 
       {p.cap && (
         <>
           <circle cx={p._x + r - 2} cy={p._y - r + 4} r="7" fill="#FFC107" stroke="#fff" strokeWidth="1">
-            <title>Captain</title>
+            <title>{captainLabel}</title>
           </circle>
           <text x={p._x + r - 2} y={p._y - r + 5.5} textAnchor="middle" fontSize="7" fontWeight="900" fill="#000">C</text>
         </>
       )}
-      {/* Name */}
-      <text x={nameX} y={p._y + r + 15} textAnchor={nameAnchor} fontSize="9" fontWeight="600" fill="#fff"
+      {/* Name — centered below circle */}
+      <text x={p._x} y={p._y + r + 16} textAnchor="middle" fontSize="10" fontWeight="600" fill="#fff"
         style={{ textShadow: "0 1px 3px rgba(0,0,0,0.85)" }}>{p.sn}</text>
-      <text x={nameX} y={p._y + r + 26} textAnchor={nameAnchor} fontSize="8" fill="rgba(255,255,255,0.5)"
-        style={{ fontVariantNumeric: "tabular-nums" }}>#{p.sh}</text>
     </g>
   );
 }
@@ -222,6 +225,7 @@ export default function DrawPitch({
   awayName: string;
   substitutes?: ReactNode;
 }) {
+  const { t } = useI18n();
   const home = layoutPlayers(homePlayers, "home", homeFormation);
   const away = layoutPlayers(awayPlayers, "away", awayFormation);
 
@@ -233,27 +237,25 @@ export default function DrawPitch({
 
           {/* Team labels — inside pitch at top */}
           <g>
-            {/* Home team (left side) */}
-            <text x={250} y={28} textAnchor="middle" fontSize="15" fontWeight="700" fill="#fff"
+            {/* Home team — top-left */}
+            <text x={16} y={24} textAnchor="start" fontSize="14" fontWeight="700" fill="#fff"
               style={{ textShadow: "0 1px 4px rgba(0,0,0,0.7)" }}>{homeName}</text>
             {homeFormation && (
-              <text x={250} y={46} textAnchor="middle" fontSize="11" fontWeight="600" fill="rgba(255,255,255,0.7)"
+              <text x={16} y={42} textAnchor="start" fontSize="11" fontWeight="600" fill="rgba(255,255,255,0.7)"
                 style={{ textShadow: "0 1px 3px rgba(0,0,0,0.6)" }}>{homeFormation}</text>
             )}
-            {/* Away team (right side) */}
-            <text x={750} y={28} textAnchor="middle" fontSize="15" fontWeight="700" fill="#fff"
+            {/* Away team — top-right */}
+            <text x={984} y={24} textAnchor="end" fontSize="14" fontWeight="700" fill="#fff"
               style={{ textShadow: "0 1px 4px rgba(0,0,0,0.7)" }}>{awayName}</text>
             {awayFormation && (
-              <text x={750} y={46} textAnchor="middle" fontSize="11" fontWeight="600" fill="rgba(255,255,255,0.7)"
+              <text x={984} y={42} textAnchor="end" fontSize="11" fontWeight="600" fill="rgba(255,255,255,0.7)"
                 style={{ textShadow: "0 1px 3px rgba(0,0,0,0.6)" }}>{awayFormation}</text>
             )}
-            {/* VS divider */}
-            <text x={500} y={34} textAnchor="middle" fontSize="12" fontWeight="700" fill="rgba(255,255,255,0.35)">VS</text>
           </g>
 
           {/* Players */}
-          {home.map(p => <PlayerNode key={"hp" + p.sh} p={p} color="#1565C0" isHome />)}
-          {away.map(p => <PlayerNode key={"ap" + p.sh} p={p} color="#C62828" isHome={false} />)}
+          {home.map(p => <PlayerNode key={"hp" + p.sh} p={p} color="#1565C0" isHome captainLabel={t("pitch.captain")} />)}
+          {away.map(p => <PlayerNode key={"ap" + p.sh} p={p} color="#C62828" isHome={false} captainLabel={t("pitch.captain")} />)}
         </svg>
       </div>
 

@@ -48,6 +48,8 @@ export default function MatchList() {
   const [matches, setMatches] = useState<MatchListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [leagueOpen, setLeagueOpen] = useState(false);
+  const [leagueInput, setLeagueInput] = useState("");
 
   const today = useMemo(() => formatDateISO(new Date(), timezone), [timezone]);
 
@@ -63,6 +65,7 @@ export default function MatchList() {
   function setStatusFilter(val: string) {
     setSearchParams(prev => {
       prev.set("status", val);
+      prev.delete("league");
       if (val === "1") prev.delete("date");
       else if (!prev.has("date")) prev.set("date", today);
       return prev;
@@ -75,12 +78,25 @@ export default function MatchList() {
     setSearchParams(prev => { if (val !== "all") prev.set("league", val); else prev.delete("league"); return prev; });
   }
 
-  // Extract unique leagues from current matches
+  // Extract unique leagues from current matches, always include selected filter
   const leagues = useMemo(() => {
     const set = new Set<string>();
     matches.forEach(m => { if (m.tnm) set.add(m.tnm); });
+    if (leagueFilter !== "all") set.add(leagueFilter);
     return Array.from(set).sort();
-  }, [matches]);
+  }, [matches, leagueFilter]);
+
+  // Filter leagues by input text
+  const filteredLeagues = useMemo(() => {
+    if (!leagueInput) return leagues;
+    const q = leagueInput.toLowerCase();
+    return leagues.filter(l => l.toLowerCase().includes(q));
+  }, [leagues, leagueInput]);
+
+  // Sync input with external leagueFilter changes
+  useEffect(() => {
+    setLeagueInput(leagueFilter === "all" ? "" : leagueFilter);
+  }, [leagueFilter]);
 
   const fetchMatches = useCallback(async () => {
     const cached = api.getList(selectedDate, statusFilter);
@@ -97,14 +113,14 @@ export default function MatchList() {
       if (data.length > 0) {
         setMatches(data);
       } else {
-        setError("No matches found");
+        setError(t("empty.noMatchesForDate"));
       }
     } catch (err: unknown) {
       setError((err as Error).message);
     } finally {
       setLoading(false);
     }
-  }, [selectedDate, statusFilter, timezone]);
+  }, [selectedDate, statusFilter, timezone, t]);
 
   useEffect(() => {
     fetchMatches();
@@ -164,34 +180,34 @@ export default function MatchList() {
     if (sc === 0) return "";
 
     // Postponed / Delayed
-    if (sc === 60) return "Postponed";
-    if (sc === 61) return "Delayed";
+    if (sc === 60) return t("match.postponed");
+    if (sc === 61) return t("match.delayed");
 
     // Canceled / Abandoned / Walkover / Retired
-    if (sc === 70) return "Canceled";
-    if (sc === 90) return "Abandoned";
-    if (sc === 91) return "Walkover";
-    if (sc === 92) return "Retired";
-    if (sc === 93) return "Removed";
-    if (sc === 97 || sc === 98) return "Defaulted";
+    if (sc === 70) return t("match.canceled");
+    if (sc === 90) return t("match.abandoned");
+    if (sc === 91) return t("match.walkover");
+    if (sc === 92) return t("match.retired");
+    if (sc === 93) return t("match.removed");
+    if (sc === 97 || sc === 98) return t("match.defaulted");
 
     // Interrupted / Suspended
-    if (sc === 80) return "Interrupted";
-    if (sc === 81) return "Suspended";
+    if (sc === 80) return t("match.interrupted");
+    if (sc === 81) return t("match.suspended");
 
     // Halftime / ET halftime
     if (sc === 31) return t("match.ht");
-    if (sc === 33) return "ET HT";
+    if (sc === 33) return t("match.et_ht");
 
     // Awaiting extra time / penalties
-    if (sc === 32) return "Awaiting ET";
-    if (sc === 34) return "Penalties";
-    if (sc === 50) return "Penalties";
+    if (sc === 32) return t("match.awaiting_et");
+    if (sc === 34) return t("match.penalties");
+    if (sc === 50) return t("match.penalties");
 
     // Finished
     if (sc >= 100 && sc < 110) return t("match.ft");
-    if (sc === 110) return "AET";
-    if (sc === 120) return "AP";
+    if (sc === 110) return t("match.aet");
+    if (sc === 120) return t("match.ap");
 
     // Live — compute clock
     if (sc >= 1 && sc < 100) {
@@ -333,16 +349,39 @@ export default function MatchList() {
           <option value="country">{t("groupBy.country")}</option>
           <option value="time">{t("groupBy.time")}</option>
         </select>
-        <select
-          value={leagueFilter}
-          onChange={(e) => setLeagueFilter(e.target.value)}
-          className="text-xs bg-surface-muted text-text-primary border border-border rounded-md px-2.5 py-1.5 outline-none cursor-pointer max-w-[200px]"
-        >
-          <option value="all">All Leagues</option>
-          {leagues.map((l) => (
-            <option key={l} value={l}>{l}</option>
-          ))}
-        </select>
+        <div className="relative">
+          <input
+            type="text"
+            value={leagueInput}
+            placeholder={t("filter.allLeagues")}
+            onFocus={() => setLeagueOpen(true)}
+            onBlur={() => setTimeout(() => setLeagueOpen(false), 150)}
+            onChange={(e) => { setLeagueInput(e.target.value); setLeagueOpen(true); }}
+            className="text-xs bg-surface-muted text-text-primary border border-border rounded-md px-2.5 py-1.5 outline-none w-[160px]"
+          />
+          {leagueOpen && (
+            <div className="absolute top-full left-0 mt-1 w-full max-h-[240px] overflow-y-auto bg-surface border border-border rounded-md shadow-lg z-50">
+              <button
+                onMouseDown={() => { setLeagueFilter("all"); setLeagueOpen(false); }}
+                className={`w-full text-left text-xs px-2.5 py-1.5 hover:bg-surface-muted cursor-pointer ${leagueFilter === "all" ? "text-accent font-semibold" : "text-text-primary"}`}
+              >
+                {t("filter.allLeagues")}
+              </button>
+              {filteredLeagues.map((l) => (
+                <button
+                  key={l}
+                  onMouseDown={() => { setLeagueFilter(l); setLeagueOpen(false); }}
+                  className={`w-full text-left text-xs px-2.5 py-1.5 hover:bg-surface-muted cursor-pointer truncate ${leagueFilter === l ? "text-accent font-semibold" : "text-text-primary"}`}
+                >
+                  {l}
+                </button>
+              ))}
+              {filteredLeagues.length === 0 && leagueInput && (
+                <div className="text-xs text-text-muted px-2.5 py-3 text-center">{t("empty.noMatches")}</div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Loading skeleton */}
@@ -366,7 +405,7 @@ export default function MatchList() {
 
       {/* Empty state */}
       {!loading && !error && grouped.length === 0 && (
-        <div className="text-center py-16 text-text-muted text-sm">No matches found for this date</div>
+        <div className="text-center py-16 text-text-muted text-sm">{t("empty.noMatchesForDate")}</div>
       )}
 
       {/* Match list */}
@@ -407,7 +446,7 @@ export default function MatchList() {
                   {/* Score */}
                   <div className="flex flex-col items-center min-w-[60px] sm:min-w-[70px] shrink-0">
                     {m.sc === 0 || m.sc === 60 || m.sc === 61 ? (
-                      <span className="text-sm font-semibold text-text-muted">vs</span>
+                      <span className="text-sm font-semibold text-text-muted">{t("h2h.vs")}</span>
                     ) : (
                       <>
                         <span className="text-lg sm:text-xl font-extrabold text-text-primary tracking-[2px] tabular-nums">{m.hsc} - {m.asc}</span>

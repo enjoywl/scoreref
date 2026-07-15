@@ -65,20 +65,22 @@ function getIncidentIcon(tp: string, cl?: string) {
 }
 
 /* ---- Match table (shared by H2H / team fixtures) ---- */
-function MatchTable({ matches, refTeam, navigate, timezone }: {
+function MatchTable({ matches, refTeam, navigate, timezone, t }: {
   matches: H2hMatch[];
   refTeam: string;
   navigate: (path: string) => void;
   timezone: string;
+  t: (key: string, params?: Record<string, string | number>) => string;
 }) {
-  if (!matches.length) return <div className="text-center py-8 text-text-muted text-sm">No matches</div>;
+  const headers = ["h2h.date", "h2h.tournament", "h2h.home", "h2h.score", "h2h.away", "h2h.season", "h2h.result"];
+  if (!matches.length) return <div className="text-center py-8 text-text-muted text-sm">{t("empty.noMatches")}</div>;
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-separate border-spacing-0 text-[13px]">
         <thead>
           <tr>
-            {["Date", "Tournament", "Home", "Score", "Away", "Season", "Result"].map(h => (
-              <th key={h} className="sticky top-0 py-2 px-2.5 text-[11px] font-semibold text-text-muted text-left whitespace-nowrap border-b-2 border-border bg-surface">{h}</th>
+            {headers.map(h => (
+              <th key={h} className="sticky top-0 py-2 px-2.5 text-[11px] font-semibold text-text-muted text-left whitespace-nowrap border-b-2 border-border bg-surface">{t(h)}</th>
             ))}
           </tr>
         </thead>
@@ -117,7 +119,7 @@ function MatchTable({ matches, refTeam, navigate, timezone }: {
                       )}
                     </>
                   ) : (
-                    <span className="text-xs text-text-muted">vs</span>
+                    <span className="text-xs text-text-muted">{t("h2h.vs")}</span>
                   )}
                 </td>
                 <td className="py-2.5 px-3 text-center font-semibold text-text-primary border-b border-border-subtle">{ev.anm || "-"}</td>
@@ -207,8 +209,8 @@ export default function MatchDetail() {
     fetchJSON(`/v1/api/match/${mid}/lineups`).then(d => {
       if (d) {
         setLineups({
-          home: (d.hm?.pl || []).map((p: Record<string, unknown>) => ({ nm: p.nm, sn: p.sn, sh: p.sh, pos: p.pos, sub: p.sub, cap: p.cap, pid: p.pid, age: p.age } as LineupPlayer)),
-          away: (d.aw?.pl || []).map((p: Record<string, unknown>) => ({ nm: p.nm, sn: p.sn, sh: p.sh, pos: p.pos, sub: p.sub, cap: p.cap, pid: p.pid, age: p.age } as LineupPlayer)),
+          home: (d.hm?.pl || []).map((p: Record<string, unknown>) => ({ nm: p.nm, sn: p.sn, sh: p.sh, pos: p.pos, sub: p.sub, cap: p.cap, pid: (p.pid ?? p.id) as number | undefined, age: p.age } as LineupPlayer)),
+          away: (d.aw?.pl || []).map((p: Record<string, unknown>) => ({ nm: p.nm, sn: p.sn, sh: p.sh, pos: p.pos, sub: p.sub, cap: p.cap, pid: (p.pid ?? p.id) as number | undefined, age: p.age } as LineupPlayer)),
           hform: d.hm?.fm || "", aform: d.aw?.fm || "",
         });
       }
@@ -227,6 +229,13 @@ export default function MatchDetail() {
   useEffect(() => {
     if (mid) loadMatchData(mid);
   }, [mid, loadMatchData]);
+
+  // Auto-switch to lineups tab for not-started matches
+  useEffect(() => {
+    if (info?.sc === 0 && activeTab !== "lineups" && activeTab !== "h2h") {
+      setActiveTab("lineups");
+    }
+  }, [info?.sc, activeTab]);
 
   // Redirect to canonical URL with slug
   useEffect(() => {
@@ -268,28 +277,28 @@ export default function MatchDetail() {
     if (sc === 0) return "";
 
     // Postponed / Delayed
-    if (sc === 60) return "Postponed";
-    if (sc === 61) return "Delayed";
+    if (sc === 60) return t("match.postponed");
+    if (sc === 61) return t("match.delayed");
 
     // Canceled / Abandoned
-    if (sc === 70) return "Canceled";
-    if (sc === 90) return "Abandoned";
-    if (sc === 91) return "Walkover";
-    if (sc === 92) return "Retired";
-    if (sc === 93) return "Removed";
-    if (sc === 97 || sc === 98) return "Defaulted";
+    if (sc === 70) return t("match.canceled");
+    if (sc === 90) return t("match.abandoned");
+    if (sc === 91) return t("match.walkover");
+    if (sc === 92) return t("match.retired");
+    if (sc === 93) return t("match.removed");
+    if (sc === 97 || sc === 98) return t("match.defaulted");
 
     // Breaks
     if (sc === 31) return t("match.ht");
-    if (sc === 33) return "ET HT";
-    if (sc === 32) return "Awaiting ET";
-    if (sc === 34) return "Awaiting Penalties";
-    if (sc === 50) return "Penalties";
+    if (sc === 33) return t("match.et_ht");
+    if (sc === 32) return t("match.awaiting_et");
+    if (sc === 34) return t("match.awaiting_penalties");
+    if (sc === 50) return t("match.penalties");
 
     // Finished
     if (sc >= 100 && sc < 110) return t("match.ft");
-    if (sc === 110) return "AET";
-    if (sc === 120) return "AP";
+    if (sc === 110) return t("match.aet");
+    if (sc === 120) return t("match.ap");
 
     // Live — use cps for accurate clock, fallback to sts
     if (sc >= 1 && sc < 100) {
@@ -349,7 +358,7 @@ export default function MatchDetail() {
       )}
 
       {/* Error */}
-      {!loading && !info && <div className="text-center py-16 text-[#e53935]">Failed to load match data</div>}
+      {!loading && !info && <div className="text-center py-16 text-[#e53935]">{t("empty.failedToLoad")}</div>}
 
       {/* Content */}
       {info && (
@@ -386,7 +395,7 @@ export default function MatchDetail() {
                 onClick={() => (window.history.length > 1 ? navigate(-1) : navigate("/"))}
                 className="text-xs font-semibold text-accent bg-accent/8 dark:bg-accent/10 px-3 py-1 rounded-2xl hover:bg-accent/20 transition-colors cursor-pointer"
               >
-                &larr; Back
+                {t("matchInfo.back")}
               </button>
               <span className="flex-1 text-center text-[13px] text-text-secondary font-medium flex items-center justify-center gap-1.5">
                 <LeagueAvatar id={info.tid} name={(info.tnm)} className="w-[18px] h-[18px] object-contain rounded shrink-0" />
@@ -429,21 +438,21 @@ export default function MatchDetail() {
                 {formatKickoffTime(info.sts, timezone)}
               </span>
               {info.vnm && <span className="text-xs text-text-secondary bg-[#f0f0f0] dark:bg-white/5 px-3 py-1 rounded-xl">{info.vnm}</span>}
-              <span className="text-xs text-text-secondary bg-[#f0f0f0] dark:bg-white/5 px-3 py-1 rounded-xl">Ref: {info.rfn || "-"}</span>
+              <span className="text-xs text-text-secondary bg-[#f0f0f0] dark:bg-white/5 px-3 py-1 rounded-xl">{t("matchInfo.ref")} {info.rfn || "-"}</span>
             </div>
           </div>
 
           {/* Match info grid — always visible */}
           {info && (
             <section className="mb-5">
-              <h3 className="text-[15px] font-semibold text-text-secondary mb-3 pb-1.5 border-b border-border">Match Info</h3>
+              <h3 className="text-[15px] font-semibold text-text-secondary mb-3 pb-1.5 border-b border-border">{t("matchInfo.title")}</h3>
               <div className="grid grid-cols-2 gap-px bg-border rounded-lg overflow-hidden">
                 {[
-                  ["Status", info.sd || info.st || "-"],
-                  ["Round", info.rnm || "-"],
-                  ["Season", info.snm || "-"],
-                  ["Referee", info.rfn || "-"],
-                  ...(info.grp ? [["Group", info.grp]] : []),
+                  [t("matchInfo.status"), info.sd || info.st || "-"],
+                  [t("matchInfo.round"), info.rnm || "-"],
+                  [t("matchInfo.season"), info.snm || "-"],
+                  [t("matchInfo.referee"), info.rfn || "-"],
+                  ...(info.grp ? [[t("matchInfo.group"), info.grp]] : []),
                 ].map(([label, val]) => (
                   <div key={label} className="flex justify-between py-2.5 px-3.5 bg-surface text-[13px] text-text-primary">
                     <span className="text-[12px] text-text-muted">{label}</span>
@@ -457,13 +466,19 @@ export default function MatchDetail() {
           {/* Tabs */}
           <div className="border-b border-border mb-5">
             <div className="flex gap-0 -mb-px overflow-x-auto scrollbar-none">
-              {[
-                { key: "stats", label: "Stats" },
-                { key: "incidents", label: "Incidents" },
-                { key: "commentary", label: "Commentary" },
-                { key: "lineups", label: "Lineups" },
-                { key: "h2h", label: "H2H" },
-              ].map(tab => (
+              {(info.sc === 0
+                ? [
+                    { key: "lineups", label: t("tab.lineups") },
+                    { key: "h2h", label: t("tab.h2h") },
+                  ]
+                : [
+                    { key: "incidents", label: t("tab.incidents") },
+                    { key: "stats", label: t("tab.stats") },
+                    { key: "commentary", label: t("tab.commentary") },
+                    { key: "lineups", label: t("tab.lineups") },
+                    { key: "h2h", label: t("tab.h2h") },
+                  ]
+              ).map(tab => (
                 <button
                   key={tab.key}
                   onClick={() => {
@@ -524,7 +539,7 @@ export default function MatchDetail() {
                 })}
               </div>
             ) : (
-              <div className="text-center py-16 text-text-muted">No stats available</div>
+              <div className="text-center py-16 text-text-muted">{t("empty.noStats")}</div>
             )
           )}
 
@@ -540,7 +555,7 @@ export default function MatchDetail() {
                     </div>
                   );
                   if (ev.tp === "injuryTime") return (
-                    <div key={idx} className="text-center text-[11px] text-[#e6a23c] font-semibold py-1">+{ev.ln}&apos; added</div>
+                    <div key={idx} className="text-center text-[11px] text-[#e6a23c] font-semibold py-1">{t("incidents.injuryTime", { n: ev.ln ?? 0 })}</div>
                   );
                   const ico = getIncidentIcon(ev.tp, ev.cl);
                   const dotColors: Record<string, string> = {
@@ -568,12 +583,12 @@ export default function MatchDetail() {
                               {ev.tp === "goal" || ev.tp === "inGamePenalty" ? (
                                 <>
                                   <span className="text-[13px] font-semibold text-text-primary">{getPlayerName(ev)}</span>
-                                  {ev.a1n && <span className="text-[11px] text-accent">A {ev.a1n}</span>}
+                                  {ev.a1n && <span className="text-[11px] text-accent">{t("incidents.assist")} {ev.a1n}</span>}
                                 </>
                               ) : ev.tp === "card" ? (
                                 <>
                                   <span className="text-[13px] font-semibold text-text-primary">{getPlayerName(ev)}</span>
-                                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${ev.cl === "red" ? "text-[#e53935] bg-[#e53935]/10 dark:bg-[#e53935]/10 bg-[#e53935]/15" : "text-[#f4c542] bg-[#f4c542]/10 dark:bg-[#f4c542]/10 bg-[#f4c542]/15"}`}>{ev.cl === "red" ? "Red Card" : "Yellow Card"}</span>
+                                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${ev.cl === "red" ? "text-[#e53935] bg-[#e53935]/10 dark:bg-[#e53935]/10 bg-[#e53935]/15" : "text-[#f4c542] bg-[#f4c542]/10 dark:bg-[#f4c542]/10 bg-[#f4c542]/15"}`}>{ev.cl === "red" ? t("incidents.redCard") : t("incidents.yellowCard")}</span>
                                 </>
                               ) : ev.tp === "substitution" ? (
                                 <>
@@ -604,12 +619,12 @@ export default function MatchDetail() {
                               {ev.tp === "goal" || ev.tp === "inGamePenalty" ? (
                                 <>
                                   <span className="text-[13px] font-semibold text-text-primary">{getPlayerName(ev)}</span>
-                                  {ev.a1n && <span className="text-[11px] text-accent">A {ev.a1n}</span>}
+                                  {ev.a1n && <span className="text-[11px] text-accent">{t("incidents.assist")} {ev.a1n}</span>}
                                 </>
                               ) : ev.tp === "card" ? (
                                 <>
                                   <span className="text-[13px] font-semibold text-text-primary">{getPlayerName(ev)}</span>
-                                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${ev.cl === "red" ? "text-[#e53935] bg-[#e53935]/10" : "text-[#f4c542] bg-[#f4c542]/10"}`}>{ev.cl === "red" ? "Red Card" : "Yellow Card"}</span>
+                                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${ev.cl === "red" ? "text-[#e53935] bg-[#e53935]/10" : "text-[#f4c542] bg-[#f4c542]/10"}`}>{ev.cl === "red" ? t("incidents.redCard") : t("incidents.yellowCard")}</span>
                                 </>
                               ) : ev.tp === "substitution" ? (
                                 <>
@@ -629,7 +644,7 @@ export default function MatchDetail() {
                 })}
               </div>
             ) : (
-              <div className="text-center py-16 text-text-muted">No incidents recorded</div>
+              <div className="text-center py-16 text-text-muted">{t("empty.noIncidents")}</div>
             )
           )}
 
@@ -669,14 +684,14 @@ export default function MatchDetail() {
                 ))}
               </div>
             ) : (
-              <div className="text-center py-16 text-text-muted">No commentary available</div>
+              <div className="text-center py-16 text-text-muted">{t("empty.noCommentary")}</div>
             )
           )}
 
           {/* === LINEUPS TAB === */}
           {activeTab === "lineups" && (
             !fetched.lineups ? <div className="flex justify-center py-16"><div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" /></div>
-            : !lineups ? <div className="text-center py-16 text-text-muted">No lineup data</div>
+            : !lineups ? <div className="text-center py-16 text-text-muted">{t("empty.noLineupData")}</div>
             : (
               <DrawPitch
                 homePlayers={lineups.home}
@@ -689,7 +704,7 @@ export default function MatchDetail() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-[900px] mx-auto w-full">
                     {([info.hnm, info.anm] as const).map((teamName, ti) => {
                       const subs = (ti === 0 ? lineups.home : lineups.away).filter(p => p.sub);
-                      const label = `${teamName} — Substitutes`;
+                      const label = `${teamName} — ${t("lineups.substitutes")}`;
                       return (
                         <div key={ti}>
                           <div className="text-xs text-text-secondary font-semibold mb-2">{label}</div>
@@ -743,12 +758,12 @@ export default function MatchDetail() {
           {/* === H2H TAB === */}
           {activeTab === "h2h" && (
             !fetched.h2h ? <div className="flex justify-center py-16"><div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" /></div>
-            : !h2h ? <div className="text-center py-16 text-text-muted">No H2H data available</div>
+            : !h2h ? <div className="text-center py-16 text-text-muted">{t("empty.noH2hData")}</div>
             : (
               <div className="flex flex-col gap-6">
                 {/* Limit selector */}
                 <div className="flex items-center justify-end gap-2">
-                  <span className="text-xs text-text-muted">Show:</span>
+                  <span className="text-xs text-text-muted">{t("h2h.show")}</span>
                   <select
                     value={h2hLimit}
                     onChange={(e) => setH2hLimit(Number(e.target.value))}
@@ -761,10 +776,10 @@ export default function MatchDetail() {
                 {/* Block 1: Head to Head */}
                 <section>
                   <h3 className="text-[15px] font-semibold text-text-secondary mb-3 pb-1.5 border-b border-border">
-                    Head to Head
-                    {h2h.h2h.length > 0 && <span className="text-xs text-text-muted font-normal ml-2">({h2h.h2h.length} matches)</span>}
+                    {t("h2h.headToHead")}
+                    {h2h.h2h.length > 0 && <span className="text-xs text-text-muted font-normal ml-2">({t("h2h.matches", { n: h2h.h2h.length })})</span>}
                   </h3>
-                  <MatchTable matches={h2h.h2h.slice(0, h2hLimit)} refTeam={info.hnm} navigate={navigate} timezone={timezone} />
+                  <MatchTable matches={h2h.h2h.slice(0, h2hLimit)} refTeam={info.hnm} navigate={navigate} timezone={timezone} t={t} />
                 </section>
 
                 {/* Block 2: Home team fixtures */}
@@ -773,8 +788,8 @@ export default function MatchDetail() {
                   <div className="flex items-center justify-between gap-2 mb-3">
                     <div className="flex bg-surface-muted rounded-md p-0.5 w-fit">
                       {[
-                        { key: "recent" as const, label: `Finished (${h2h.home.recent.length})` },
-                        { key: "upcoming" as const, label: `Upcoming (${h2h.home.upcoming.length})` },
+                        { key: "recent" as const, label: `${t("h2h.finished")} (${h2h.home.recent.length})` },
+                        { key: "upcoming" as const, label: `${t("h2h.upcoming")} (${h2h.home.upcoming.length})` },
                       ].map(o => (
                         <button
                           key={o.key}
@@ -795,6 +810,7 @@ export default function MatchDetail() {
                     refTeam={info.hnm}
                     navigate={navigate}
                     timezone={timezone}
+                    t={t}
                   />
                 </section>
 
@@ -804,8 +820,8 @@ export default function MatchDetail() {
                   <div className="flex items-center justify-between gap-2 mb-3">
                     <div className="flex bg-surface-muted rounded-md p-0.5 w-fit">
                       {[
-                        { key: "recent" as const, label: `Finished (${h2h.away.recent.length})` },
-                        { key: "upcoming" as const, label: `Upcoming (${h2h.away.upcoming.length})` },
+                        { key: "recent" as const, label: `${t("h2h.finished")} (${h2h.away.recent.length})` },
+                        { key: "upcoming" as const, label: `${t("h2h.upcoming")} (${h2h.away.upcoming.length})` },
                       ].map(o => (
                         <button
                           key={o.key}
@@ -826,6 +842,7 @@ export default function MatchDetail() {
                     refTeam={info.anm}
                     navigate={navigate}
                     timezone={timezone}
+                    t={t}
                   />
                 </section>
               </div>
