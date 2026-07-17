@@ -18,6 +18,7 @@
   --color-skeleton-from: #222;
   --color-skeleton-via: #2a2a2a;
   --color-skeleton-to: #222;
+  --animate-blink: blink 0.8s ease-in-out infinite;
 }
 
 html:not(.dark) {
@@ -48,4 +49,9 @@ body {
   -webkit-tap-highlight-color: transparent;
   -webkit-font-smoothing: antialiased;
   padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
 }

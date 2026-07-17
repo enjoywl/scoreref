@@ -40,6 +40,15 @@ function formatKickoff(ts: number, tz: string) {
   return formatKickoffTime(ts, tz);
 }
 
+function MatchTimeText({ time, sc }: { time: string; sc: number }) {
+  // Only blink the ' mark for live running clock
+  if (time.endsWith("'") && sc >= 1 && sc < 100 && sc !== 31 && sc !== 32 && sc !== 33 && sc !== 34) {
+    const numberPart = time.slice(0, -1);
+    return <>{numberPart}<span className="animate-blink">'</span></>;
+  }
+  return <>{time}</>;
+}
+
 export default function MatchList() {
   const { t } = useI18n();
   const { timezone } = useTimezone();
@@ -113,7 +122,7 @@ export default function MatchList() {
       if (data.length > 0) {
         setMatches(data);
       } else {
-        setError(t("empty.noMatchesForDate"));
+        setMatches([]);
       }
     } catch (err: unknown) {
       setError((err as Error).message);
@@ -211,24 +220,34 @@ export default function MatchList() {
     if (sc === 110) return t("match.aet");
     if (sc === 120) return t("match.ap");
 
-    // Live — compute clock
+    // Live — compute clock from cps (current period start)
     if (sc >= 1 && sc < 100) {
-      // First half / period
-      if (sc === 1 || sc === 6 || sc === 20) {
-        const elapsed = Math.max(0, Math.floor((nowSec - m.sts) / 60));
+      const elapsed = m.cps ? Math.max(0, Math.floor((nowSec - m.cps) / 60)) : 0;
+
+      // 1st half
+      if (sc === 6) {
         if (elapsed <= 45) return elapsed + "'";
         return "45+" + (elapsed - 45) + "'";
       }
-      // Second half / period
-      if (sc === 2 || sc === 7) {
-        const secondHalfStart = m.sts + 45 * 60 + 15 * 60;
-        const halfElapsed = Math.max(0, Math.floor((nowSec - secondHalfStart) / 60));
-        const total = 45 + halfElapsed;
-        if (halfElapsed <= 45) return total + "'";
-        return "90+" + (halfElapsed - 45) + "'";
+      // 2nd half
+      if (sc === 7) {
+        const total = 45 + elapsed;
+        if (total <= 90) return total + "'";
+        return "90+" + (total - 90) + "'";
       }
-      // Extra periods / other live states
-      const elapsed = Math.max(0, Math.floor((nowSec - m.sts) / 60));
+      // 1st extra
+      if (sc === 41) {
+        const total = 90 + elapsed;
+        if (total <= 105) return total + "'";
+        return "105+" + (total - 105) + "'";
+      }
+      // 2nd extra
+      if (sc === 42) {
+        const total = 105 + elapsed;
+        if (total <= 120) return total + "'";
+        return "120+" + (total - 120) + "'";
+      }
+      // Fallback for other live states
       return elapsed + "'";
     }
 
@@ -237,8 +256,8 @@ export default function MatchList() {
 
   function badgeClass(sc: number): string {
     // Live in progress (exclude breaks and awaiting states)
-    if (sc >= 1 && sc <= 59 && sc !== 31 && sc !== 32 && sc !== 33 && sc !== 34) return "bg-accent text-white animate-pulse-ring";
-    if (sc === 80 || sc === 81) return "bg-accent text-white animate-pulse-ring";
+    if (sc >= 1 && sc <= 59 && sc !== 31 && sc !== 32 && sc !== 33 && sc !== 34) return "text-[#e53935] font-bold";
+    if (sc === 80 || sc === 81) return "text-[#e53935] font-bold";
     // HT / ET HT
     if (sc === 31 || sc === 33) return "bg-[#e6a23c] text-white";
     // Finished
@@ -403,11 +422,13 @@ export default function MatchList() {
       )}
 
       {/* Error */}
-      {error && <div className="text-center py-16 text-[#e53935] text-base">{t("error")}: {error}</div>}
+      {error && <div className="text-center py-16 text-[#e53935] text-base">{error}</div>}
 
       {/* Empty state */}
       {!loading && !error && grouped.length === 0 && (
-        <div className="text-center py-16 text-text-muted text-sm">{t("empty.noMatchesForDate")}</div>
+        <div className="text-center py-16 text-text-muted text-sm">
+          {statusFilter === "1" ? t("empty.noLiveMatches") : statusFilter === "0" ? t("empty.noScheduledMatches") : t("empty.noFinishedMatches")}
+        </div>
       )}
 
       {/* Match list */}
@@ -435,7 +456,7 @@ export default function MatchList() {
                     <span
                       className={`text-[10px] sm:text-[11px] font-bold px-1.5 sm:px-2 py-0.5 rounded-[10px] ${badgeClass(m.sc)}`}
                     >
-                      {getMatchTime(m)}
+                      <MatchTimeText time={getMatchTime(m)} sc={m.sc} />
                     </span>
                   </div>
 

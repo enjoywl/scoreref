@@ -84,6 +84,9 @@ export default {
     noLineupData: "暂无阵容数据",
     noH2hData: "暂无交锋数据",
     noMatchesForDate: "该日期暂无比赛",
+    noLiveMatches: "没有进行中赛事",
+    noScheduledMatches: "没有未开赛赛事",
+    noFinishedMatches: "没有已结束赛事",
     failedToLoad: "加载比赛数据失败",
   },
   filter: {

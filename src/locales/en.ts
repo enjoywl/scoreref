@@ -84,6 +84,9 @@ export default {
     noLineupData: "No lineup data",
     noH2hData: "No H2H data available",
     noMatchesForDate: "No matches found for this date",
+    noLiveMatches: "No live matches",
+    noScheduledMatches: "No scheduled matches",
+    noFinishedMatches: "No finished matches",
     failedToLoad: "Failed to load match data",
   },
   filter: {

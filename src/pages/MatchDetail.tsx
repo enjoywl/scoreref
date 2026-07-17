@@ -40,11 +40,20 @@ interface H2hMatch {
   hs1: number; as1: number; hnt: number; ant: number;
   sts: number; st: string; sc: number; snm: string; tnm: string;
   rnm: string; wnr: number;
+  hid?: number; aid?: number; tid?: number;
 }
 
 /* ---- Helpers ---- */
 function getPlayerName(ev: Incident): string {
   return ev.pnm || ev.pin || ev.pon || "";
+}
+
+function MatchTimeText({ time, sc }: { time: string; sc: number }) {
+  if (time.endsWith("'") && sc >= 1 && sc < 100 && sc !== 31 && sc !== 32 && sc !== 33 && sc !== 34) {
+    const numberPart = time.slice(0, -1);
+    return <>{numberPart}<span className="animate-blink">'</span></>;
+  }
+  return <>{time}</>;
 }
 
 function getIncidentIcon(tp: string, cl?: string) {
@@ -108,8 +117,18 @@ function MatchTable({ matches, refTeam, navigate, timezone, t }: {
                 <td className="py-2.5 px-3 text-xs text-text-secondary border-b border-border-subtle whitespace-nowrap rounded-l-md">
                   {ev.sts ? formatDateShort(ev.sts, timezone) : "-"}
                 </td>
-                <td className="py-2.5 px-3 text-xs text-text-muted border-b border-border-subtle max-w-[140px] truncate">{ev.tnm || "-"}</td>
-                <td className="py-2.5 px-3 text-center font-semibold text-text-primary border-b border-border-subtle">{ev.hnm || "-"}</td>
+                <td className="py-2.5 px-3 text-xs text-text-muted border-b border-border-subtle max-w-[140px] truncate">
+                  <span className="flex items-center gap-1.5">
+                    <LeagueAvatar id={ev.tid} name={ev.tnm || ""} className="w-[16px] h-[16px] object-contain rounded shrink-0" />
+                    {ev.tnm || "-"}
+                  </span>
+                </td>
+                <td className="py-2.5 px-3 text-center font-semibold text-text-primary border-b border-border-subtle">
+                  <span className="flex items-center justify-center gap-1.5">
+                    <TeamAvatar id={ev.hid} name={ev.hnm || ""} className="w-5 h-5 object-contain rounded-full shrink-0" />
+                    {ev.hnm || "-"}
+                  </span>
+                </td>
                 <td className="py-2.5 px-3 text-center border-b border-border-subtle">
                   {ev.hsc != null && ev.asc != null ? (
                     <>
@@ -122,7 +141,12 @@ function MatchTable({ matches, refTeam, navigate, timezone, t }: {
                     <span className="text-xs text-text-muted">{t("h2h.vs")}</span>
                   )}
                 </td>
-                <td className="py-2.5 px-3 text-center font-semibold text-text-primary border-b border-border-subtle">{ev.anm || "-"}</td>
+                <td className="py-2.5 px-3 text-center font-semibold text-text-primary border-b border-border-subtle">
+                  <span className="flex items-center justify-center gap-1.5">
+                    <TeamAvatar id={ev.aid} name={ev.anm || ""} className="w-5 h-5 object-contain rounded-full shrink-0" />
+                    {ev.anm || "-"}
+                  </span>
+                </td>
                 <td className="py-2.5 px-3 text-xs text-text-muted border-b border-border-subtle">{ev.snm || "-"}</td>
                 <td className="py-2.5 px-3 text-center border-b border-border-subtle rounded-r-md">
                   {resultEl}
@@ -205,8 +229,8 @@ export default function MatchDetail() {
   // Lazy-load lineups when tab selected
   function loadLineups() {
     if (!mid || fetched.lineups || lineups !== null) return;
-    setFetched(f => ({ ...f, lineups: true }));
     fetchJSON(`/v1/api/match/${mid}/lineups`).then(d => {
+      setFetched(f => ({ ...f, lineups: true }));
       if (d) {
         setLineups({
           home: (d.hm?.pl || []).map((p: Record<string, unknown>) => ({ nm: p.nm, sn: p.sn, sh: p.sh, pos: p.pos, sub: p.sub, cap: p.cap, pid: (p.pid ?? p.id) as number | undefined, age: p.age } as LineupPlayer)),
@@ -220,8 +244,8 @@ export default function MatchDetail() {
   // Lazy-load h2h when tab selected
   function loadH2h() {
     if (!mid || fetched.h2h) return;
-    setFetched(f => ({ ...f, h2h: true }));
     fetchJSON(`/v1/api/match/${mid}/h2h`).then(d => {
+      setFetched(f => ({ ...f, h2h: true }));
       if (d) setH2h({ h2h: d.h2h || [], home: d.home || { recent: [], upcoming: [] }, away: d.away || { recent: [], upcoming: [] } });
     });
   }
@@ -234,6 +258,9 @@ export default function MatchDetail() {
   useEffect(() => {
     if (info?.sc === 0 && activeTab !== "lineups" && activeTab !== "h2h") {
       setActiveTab("lineups");
+    }
+    if (info?.sc === 0 && activeTab === "lineups") {
+      loadLineups();
     }
   }, [info?.sc, activeTab]);
 
@@ -300,22 +327,34 @@ export default function MatchDetail() {
     if (sc === 110) return t("match.aet");
     if (sc === 120) return t("match.ap");
 
-    // Live — use cps for accurate clock, fallback to sts
+    // Live — compute clock from cps (current period start)
     if (sc >= 1 && sc < 100) {
-      const periodStart = info.cps ?? info.sts;
-      const elapsed = Math.max(0, Math.floor((nowSec - periodStart) / 60));
+      const elapsed = info.cps ? Math.max(0, Math.floor((nowSec - info.cps) / 60)) : 0;
 
-      // First half (sc=1,6,20)
-      if (sc === 1 || sc === 6 || sc === 20) {
+      // 1st half
+      if (sc === 6) {
         if (elapsed <= 45) return elapsed + "'";
         return "45+" + (elapsed - 45) + "'";
       }
-      // Second half (sc=2,7)
-      if (sc === 2 || sc === 7) {
-        if (elapsed <= 45) return (45 + elapsed) + "'";
-        return "90+" + (elapsed - 45) + "'";
+      // 2nd half
+      if (sc === 7) {
+        const total = 45 + elapsed;
+        if (total <= 90) return total + "'";
+        return "90+" + (total - 90) + "'";
       }
-      // Extra periods or generic live
+      // 1st extra
+      if (sc === 41) {
+        const total = 90 + elapsed;
+        if (total <= 105) return total + "'";
+        return "105+" + (total - 105) + "'";
+      }
+      // 2nd extra
+      if (sc === 42) {
+        const total = 105 + elapsed;
+        if (total <= 120) return total + "'";
+        return "120+" + (total - 120) + "'";
+      }
+      // Fallback for other live states
       return elapsed + "'";
     }
 
@@ -416,11 +455,11 @@ export default function MatchDetail() {
                 <span className="text-[32px] sm:text-[42px] font-black text-text-primary tracking-[2px] sm:tracking-[3px] tabular-nums leading-none">{info.hsc} - {info.asc}</span>
                 {info.sc >= 31 && <span className="text-xs sm:text-sm text-text-muted dark:text-white/40">({info.hs1} - {info.as1})</span>}
                 <span className={`text-xs sm:text-sm font-bold mt-0.5 sm:mt-1 px-2.5 sm:px-3.5 py-0.5 rounded-xl
-                  ${isLive ? "text-white bg-accent animate-pulse-ring" : ""}
+                  ${isLive ? "text-[#e53935]" : ""}
                   ${isHT ? "text-white bg-[#e6a23c]" : ""}
                   ${info.sc >= 100 ? "text-text-muted bg-surface-alt" : ""}`}
                 >
-                  {matchTime}
+                  <MatchTimeText time={matchTime} sc={info.sc} />
                 </span>
               </div>
               <div className="flex-1 flex flex-col items-center gap-2 sm:gap-2.5 text-center min-w-0">
@@ -761,31 +800,37 @@ export default function MatchDetail() {
             : !h2h ? <div className="text-center py-16 text-text-muted">{t("empty.noH2hData")}</div>
             : (
               <div className="flex flex-col gap-6">
-                {/* Limit selector */}
-                <div className="flex items-center justify-end gap-2">
-                  <span className="text-xs text-text-muted">{t("h2h.show")}</span>
-                  <select
-                    value={h2hLimit}
-                    onChange={(e) => setH2hLimit(Number(e.target.value))}
-                    className="text-xs bg-surface-muted text-text-primary border border-border rounded-md px-2 py-1 outline-none cursor-pointer"
-                  >
-                    {[6, 10, 20].map(n => <option key={n} value={n}>{n}</option>)}
-                  </select>
-                </div>
-
                 {/* Block 1: Head to Head */}
                 <section>
-                  <h3 className="text-[15px] font-semibold text-text-secondary mb-3 pb-1.5 border-b border-border">
-                    {t("h2h.headToHead")}
-                    {h2h.h2h.length > 0 && <span className="text-xs text-text-muted font-normal ml-2">({t("h2h.matches", { n: h2h.h2h.length })})</span>}
-                  </h3>
+                  <div className="flex items-center justify-between mb-3 pb-1.5 border-b border-border">
+                    <h3 className="text-[15px] font-semibold text-text-secondary">
+                      {t("h2h.headToHead")}
+                      {h2h.h2h.length > 0 && <span className="text-xs text-text-muted font-normal ml-2">({t("h2h.matches", { n: h2h.h2h.length })})</span>}
+                    </h3>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-text-muted">{t("h2h.show")}</span>
+                      <select value={h2hLimit} onChange={(e) => setH2hLimit(Number(e.target.value))}
+                        className="text-xs bg-surface-muted text-text-primary border border-border rounded-md px-2 py-1 outline-none cursor-pointer">
+                        {[6, 10, 20].map(n => <option key={n} value={n}>{n}</option>)}
+                      </select>
+                    </div>
+                  </div>
                   <MatchTable matches={h2h.h2h.slice(0, h2hLimit)} refTeam={info.hnm} navigate={navigate} timezone={timezone} t={t} />
                 </section>
 
                 {/* Block 2: Home team fixtures */}
                 <section>
-                  <h3 className="text-[15px] font-semibold text-text-secondary mb-3 pb-1.5 border-b border-border">{info.hnm}</h3>
-                  <div className="flex items-center justify-between gap-2 mb-3">
+                  <div className="flex items-center justify-between mb-3 pb-1.5 border-b border-border">
+                    <h3 className="text-[15px] font-semibold text-text-secondary">{info.hnm}</h3>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-text-muted">{t("h2h.show")}</span>
+                      <select value={h2hLimit} onChange={(e) => setH2hLimit(Number(e.target.value))}
+                        className="text-xs bg-surface-muted text-text-primary border border-border rounded-md px-2 py-1 outline-none cursor-pointer">
+                        {[6, 10, 20].map(n => <option key={n} value={n}>{n}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 mb-3">
                     <div className="flex bg-surface-muted rounded-md p-0.5 w-fit">
                       {[
                         { key: "recent" as const, label: `${t("h2h.finished")} (${h2h.home.recent.length})` },
@@ -816,8 +861,17 @@ export default function MatchDetail() {
 
                 {/* Block 3: Away team fixtures */}
                 <section>
-                  <h3 className="text-[15px] font-semibold text-text-secondary mb-3 pb-1.5 border-b border-border">{info.anm}</h3>
-                  <div className="flex items-center justify-between gap-2 mb-3">
+                  <div className="flex items-center justify-between mb-3 pb-1.5 border-b border-border">
+                    <h3 className="text-[15px] font-semibold text-text-secondary">{info.anm}</h3>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-text-muted">{t("h2h.show")}</span>
+                      <select value={h2hLimit} onChange={(e) => setH2hLimit(Number(e.target.value))}
+                        className="text-xs bg-surface-muted text-text-primary border border-border rounded-md px-2 py-1 outline-none cursor-pointer">
+                        {[6, 10, 20].map(n => <option key={n} value={n}>{n}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 mb-3">
                     <div className="flex bg-surface-muted rounded-md p-0.5 w-fit">
                       {[
                         { key: "recent" as const, label: `${t("h2h.finished")} (${h2h.away.recent.length})` },

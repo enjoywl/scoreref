@@ -3,7 +3,7 @@ export interface MatchListItem {
   sc: number; st?: string; sd?: string;
   hnm: string; anm: string; hsc: number; asc: number;
   hs1: number; as1: number; hid: number; aid: number; snm: string; vnm?: string;
-  tid?: number;
+  tid?: number; cps?: number;
 }
 
 export interface MatchInfo {
@@ -64,6 +64,7 @@ function mapMatch(m: Record<string, any>): MatchListItem {
     snm: m.snm || "",
     vnm: m.vnm || "",
     tid: m.tid,
+    cps: m.cps,
   };
 }
 
