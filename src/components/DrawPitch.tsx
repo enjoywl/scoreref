@@ -38,11 +38,11 @@ function layoutPlayers(players: Player[], side: "home" | "away", formation?: str
   const outfield = field.filter(p => posDepth(p.pos) !== 0);
 
   // Sort outfield by position depth, then left→center→right
+  const lr = (s?: string) => !s ? 1 : s.includes("L") ? 0 : s.includes("R") ? 2 : 1;
   outfield.sort((a, b) => {
     const da = posDepth(a.pos);
     const db = posDepth(b.pos);
     if (da !== db) return da - db;
-    const lr = (s: string) => s.includes("L") ? 0 : s.includes("R") ? 2 : 1;
     return lr(a.pos) - lr(b.pos);
   });
 

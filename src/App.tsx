@@ -1,8 +1,21 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import AppRouter from "./router";
-import { useI18n } from "./locales";
+import { useI18n, getApiLanguage } from "./locales";
 import { useTimezone, TIMEZONE_OPTIONS } from "./lib/timezone";
+import { api } from "./lib/api";
+
+const LANGUAGES: { code: string; label: string }[] = [
+  { code: "en", label: "English" },
+  { code: "zh-CN", label: "\u4E2D\u6587" },
+  { code: "jp", label: "\u65E5\u672C\u8A9E" },
+  { code: "ko", label: "\uD55C\uAD6D\uC5B4" },
+  { code: "ar", label: "\u0627\u0644\u0639\u0631\u0628\u064A\u0629" },
+  { code: "es", label: "Espa\u00F1ol" },
+  { code: "fr", label: "Fran\u00E7ais" },
+  { code: "hi", label: "\u0939\u093F\u0928\u094D\u0926\u0940" },
+  { code: "pt", label: "Portugu\u00EAs" },
+];
 
 export default function App() {
   const { t, locale, setLocale } = useI18n();
@@ -13,6 +26,10 @@ export default function App() {
   useEffect(() => {
     document.documentElement.classList.toggle("dark", isDark);
   }, [isDark]);
+
+  useEffect(() => {
+    api.setLanguage(getApiLanguage(locale));
+  }, [locale]);
 
   function toggleTheme() {
     setIsDark(!isDark);
@@ -56,12 +73,19 @@ export default function App() {
               >
                 {isDark ? "\u2600" : "\u263E"}
               </button>
-              <button
-                onClick={() => setLocale(locale === "en" ? "zh-CN" : "en")}
-                className="text-xs text-text-muted hover:text-accent px-2 py-0.5 rounded transition-colors cursor-pointer"
+              <select
+                value={locale}
+                onChange={(e) => {
+                  const newLocale = e.target.value;
+                  setLocale(newLocale);
+                  api.setLanguage(getApiLanguage(newLocale));
+                }}
+                className="text-[11px] bg-surface-muted text-text-primary border border-border rounded px-1.5 py-0.5 outline-none cursor-pointer"
               >
-                {locale === "en" ? "\u4E2D\u6587" : "EN"}
-              </button>
+                {LANGUAGES.map((l) => (
+                  <option key={l.code} value={l.code}>{l.label}</option>
+                ))}
+              </select>
             </div>
           </div>
 

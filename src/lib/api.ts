@@ -71,6 +71,7 @@ function mapMatch(m: Record<string, any>): MatchListItem {
 class ApiClient {
   private state: ApiState = { lists: {}, details: {} };
   private listeners = new Set<Listener>();
+  private lang = "en";
 
   getList(date: string, status: string): MatchListItem[] {
     return this.state.lists[`${date}:${status}`] || [];
@@ -95,32 +96,57 @@ class ApiClient {
     // HTTP-only mode — no WebSocket
   }
 
+  setLanguage(lang: string) {
+    if (this.lang !== lang) {
+      this.state.lists = {};
+      this.state.details = {};
+    }
+    this.lang = lang;
+  }
+
+  private headers(extra?: Record<string, string>): Record<string, string> {
+    const h: Record<string, string> = {};
+    if (this.lang) h["X-Language"] = this.lang;
+    if (extra) Object.assign(h, extra);
+    return h;
+  }
+
   async fetchMatches(date: string, status: string, timezone?: string): Promise<MatchListItem[]> {
-    const headers: Record<string, string> = {};
-    if (timezone) headers["X-Timezone"] = timezone;
-    const res = await fetch(`/v1/api/matches/${date}?status=${status}`, { headers });
-    const json = await res.json();
-    if (json.code === 200 && Array.isArray(json.data)) {
-      const mapped = json.data.map(mapMatch);
-      this.state.lists[`${date}:${status}`] = mapped;
-      this.notify();
-      return mapped;
+    const extra: Record<string, string> = {};
+    if (timezone) extra["X-Timezone"] = timezone;
+    try {
+      const res = await fetch(`/v1/api/matches/${date}?status=${status}`, { headers: this.headers(extra) });
+      if (!res.ok) return [];
+      const json = await res.json();
+      if (json.code === 200 && Array.isArray(json.data)) {
+        const mapped = json.data.map(mapMatch);
+        this.state.lists[`${date}:${status}`] = mapped;
+        this.notify();
+        return mapped;
+      }
+    } catch {
+      // network error or invalid json
     }
     return [];
   }
 
   async fetchDetail(mid: string): Promise<MatchDetail | null> {
-    const [infoRes, incRes] = await Promise.all([
-      fetch(`/v1/api/match/${mid}`),
-      fetch(`/v1/api/match/${mid}/incidents`),
-    ]);
-    const [infoJson, incJson] = await Promise.all([infoRes.json(), incRes.json()]);
-    const info = infoJson.code === 200 ? infoJson.data : null;
-    const incidents = incJson.code === 200 ? (incJson.data?.ins || []) : [];
-    if (info) {
-      this.state.details[mid] = { info, incidents };
-      this.notify();
-      return { info, incidents };
+    try {
+      const [infoRes, incRes] = await Promise.all([
+        fetch(`/v1/api/match/${mid}`, { headers: this.headers() }),
+        fetch(`/v1/api/match/${mid}/incidents`, { headers: this.headers() }),
+      ]);
+      if (!infoRes.ok) return null;
+      const [infoJson, incJson] = await Promise.all([infoRes.json(), incRes.json()]);
+      const info = infoJson.code === 200 ? infoJson.data : null;
+      const incidents = incJson.code === 200 ? (incJson.data?.ins || []) : [];
+      if (info) {
+        this.state.details[mid] = { info, incidents };
+        this.notify();
+        return { info, incidents };
+      }
+    } catch {
+      // network error or invalid json
     }
     return null;
   }

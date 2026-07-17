@@ -1,7 +1,7 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
-import { useI18n } from "../locales";
+import { useI18n, getApiLanguage } from "../locales";
 import { api } from "../lib/api";
 import { matchSlug } from "../lib/slug";
 import { useTimezone, formatKickoffTime, formatDateShort } from "../lib/timezone";
@@ -162,7 +162,7 @@ function MatchTable({ matches, refTeam, navigate, timezone, t }: {
 
 /* ---- Component ---- */
 export default function MatchDetail() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { timezone } = useTimezone();
   const params = useParams<{ mid: string; slug?: string }>();
   const mid = params.mid!;
@@ -186,10 +186,22 @@ export default function MatchDetail() {
   // Track which data has been fetched (for lazy loading)
   const [fetched, setFetched] = useState({ commentary: false, stats: false, lineups: false, h2h: false });
 
+  // Refs to avoid stale closures in callbacks / effects that should not re-trigger on every render
+  const localeRef = useRef(locale);
+  localeRef.current = locale;
+  const activeTabRef = useRef(activeTab);
+  activeTabRef.current = activeTab;
+
   async function fetchJSON(url: string) {
-    const res = await fetch(url);
-    const json = await res.json();
-    return json.code === 200 ? json.data : null;
+    try {
+      const apiLang = getApiLanguage(localeRef.current);
+      const res = await fetch(url, { headers: { "X-Language": apiLang } });
+      if (!res.ok) return null;
+      const json = await res.json();
+      return json.code === 200 ? json.data : null;
+    } catch {
+      return null;
+    }
   }
 
   const loadMatchData = useCallback(async (matchId: string) => {
@@ -252,7 +264,55 @@ export default function MatchDetail() {
 
   useEffect(() => {
     if (mid) loadMatchData(mid);
-  }, [mid, loadMatchData]);
+  }, [mid]);
+
+  // Re-fetch translatable data when language changes — no tab reset, no loading skeleton
+  useEffect(() => {
+    if (!mid || !info) return;
+
+    // Core data (hero + incidents)
+    api.fetchDetail(mid).then(detail => {
+      if (detail) {
+        setInfo(detail.info);
+        setIncidents(detail.incidents);
+      }
+    });
+
+    // Re-fetch currently active tab's data with the new language
+    const tab = activeTabRef.current;
+    if (tab === "commentary") {
+      setFetched(f => ({ ...f, commentary: false }));
+      fetchJSON(`/v1/api/match/${mid}/comments`).then(d => {
+        if (d) setCommentary(Array.isArray(d) ? d : d.cms || []);
+        setFetched(f => ({ ...f, commentary: true }));
+      });
+    } else if (tab === "stats") {
+      setFetched(f => ({ ...f, stats: false }));
+      fetchJSON(`/v1/api/match/${mid}/statistics`).then(d => {
+        if (d) setStats(d.prs || []);
+        setFetched(f => ({ ...f, stats: true }));
+      });
+    } else if (tab === "lineups") {
+      setFetched(f => ({ ...f, lineups: false }));
+      setLineups(null);
+      fetchJSON(`/v1/api/match/${mid}/lineups`).then(d => {
+        setFetched(f => ({ ...f, lineups: true }));
+        if (d) {
+          setLineups({
+            home: (d.hm?.pl || []).map((p: Record<string, unknown>) => ({ nm: p.nm, sn: p.sn, sh: p.sh, pos: p.pos, sub: p.sub, cap: p.cap, pid: (p.pid ?? p.id) as number | undefined, age: p.age } as LineupPlayer)),
+            away: (d.aw?.pl || []).map((p: Record<string, unknown>) => ({ nm: p.nm, sn: p.sn, sh: p.sh, pos: p.pos, sub: p.sub, cap: p.cap, pid: (p.pid ?? p.id) as number | undefined, age: p.age } as LineupPlayer)),
+            hform: d.hm?.fm || "", aform: d.aw?.fm || "",
+          });
+        }
+      });
+    } else if (tab === "h2h") {
+      setFetched(f => ({ ...f, h2h: false }));
+      fetchJSON(`/v1/api/match/${mid}/h2h`).then(d => {
+        setFetched(f => ({ ...f, h2h: true }));
+        if (d) setH2h({ h2h: d.h2h || [], home: d.home || { recent: [], upcoming: [] }, away: d.away || { recent: [], upcoming: [] } });
+      });
+    }
+  }, [locale]);
 
   // Auto-switch to lineups tab for not-started matches
   useEffect(() => {

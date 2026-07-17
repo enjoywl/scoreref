@@ -6,5 +6,7 @@ export function slugify(s: string): string {
 }
 
 export function matchSlug(hnam: string, anam: string): string {
-  return `${slugify(hnam)}-vs-${slugify(anam)}`;
+  const home = slugify(hnam) || "team-a";
+  const away = slugify(anam) || "team-b";
+  return `${home}-vs-${away}`;
 }
