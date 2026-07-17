@@ -180,7 +180,7 @@ export default function MatchDetail() {
     away: { recent: H2hMatch[]; upcoming: H2hMatch[] };
   } | null>(null);
   const [teamTab, setTeamTab] = useState<{ home: "recent" | "upcoming"; away: "recent" | "upcoming" }>({ home: "recent", away: "recent" });
-  const [h2hLimit, setH2hLimit] = useState(6);
+  const [h2hLimit, setH2hLimit] = useState<Record<string, number>>({ h2h: 6, home: 6, away: 6 });
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("incidents");
   // Track which data has been fetched (for lazy loading)
@@ -809,13 +809,13 @@ export default function MatchDetail() {
                     </h3>
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-text-muted">{t("h2h.show")}</span>
-                      <select value={h2hLimit} onChange={(e) => setH2hLimit(Number(e.target.value))}
+                      <select value={h2hLimit.h2h} onChange={(e) => setH2hLimit(prev => ({ ...prev, h2h: Number(e.target.value) }))}
                         className="text-xs bg-surface-muted text-text-primary border border-border rounded-md px-2 py-1 outline-none cursor-pointer">
                         {[6, 10, 20].map(n => <option key={n} value={n}>{n}</option>)}
                       </select>
                     </div>
                   </div>
-                  <MatchTable matches={h2h.h2h.slice(0, h2hLimit)} refTeam={info.hnm} navigate={navigate} timezone={timezone} t={t} />
+                  <MatchTable matches={h2h.h2h.slice(0, h2hLimit.h2h)} refTeam={info.hnm} navigate={navigate} timezone={timezone} t={t} />
                 </section>
 
                 {/* Block 2: Home team fixtures */}
@@ -824,7 +824,7 @@ export default function MatchDetail() {
                     <h3 className="text-[15px] font-semibold text-text-secondary">{info.hnm}</h3>
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-text-muted">{t("h2h.show")}</span>
-                      <select value={h2hLimit} onChange={(e) => setH2hLimit(Number(e.target.value))}
+                      <select value={h2hLimit.home} onChange={(e) => setH2hLimit(prev => ({ ...prev, home: Number(e.target.value) }))}
                         className="text-xs bg-surface-muted text-text-primary border border-border rounded-md px-2 py-1 outline-none cursor-pointer">
                         {[6, 10, 20].map(n => <option key={n} value={n}>{n}</option>)}
                       </select>
@@ -851,7 +851,7 @@ export default function MatchDetail() {
                     </div>
                   </div>
                   <MatchTable
-                    matches={h2h.home[teamTab.home].slice(0, h2hLimit)}
+                    matches={h2h.home[teamTab.home].slice(0, h2hLimit.home)}
                     refTeam={info.hnm}
                     navigate={navigate}
                     timezone={timezone}
@@ -865,7 +865,7 @@ export default function MatchDetail() {
                     <h3 className="text-[15px] font-semibold text-text-secondary">{info.anm}</h3>
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-text-muted">{t("h2h.show")}</span>
-                      <select value={h2hLimit} onChange={(e) => setH2hLimit(Number(e.target.value))}
+                      <select value={h2hLimit.away} onChange={(e) => setH2hLimit(prev => ({ ...prev, away: Number(e.target.value) }))}
                         className="text-xs bg-surface-muted text-text-primary border border-border rounded-md px-2 py-1 outline-none cursor-pointer">
                         {[6, 10, 20].map(n => <option key={n} value={n}>{n}</option>)}
                       </select>
@@ -892,7 +892,7 @@ export default function MatchDetail() {
                     </div>
                   </div>
                   <MatchTable
-                    matches={h2h.away[teamTab.away].slice(0, h2hLimit)}
+                    matches={h2h.away[teamTab.away].slice(0, h2hLimit.away)}
                     refTeam={info.anm}
                     navigate={navigate}
                     timezone={timezone}
