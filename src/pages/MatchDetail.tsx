@@ -29,7 +29,7 @@ interface Incident {
   ln?: number; rpt?: number; pms?: number; rps?: number; rsd?: boolean; liv?: boolean;
 }
 
-interface CommentaryItem { tx: string; tp: string; ih: boolean; sq: number; pnm?: string; }
+interface CommentaryItem { tx: string; tp: string; ih: boolean; sq: number; pnm?: string; tm?: number; }
 
 interface LineupPlayer { nm: string; sn: string; sh: number; pos: string; sub: boolean; cap?: boolean; pid?: number; age?: number; }
 
@@ -81,7 +81,7 @@ function MatchTable({ matches, refTeam, navigate, timezone, t }: {
   timezone: string;
   t: (key: string, params?: Record<string, string | number>) => string;
 }) {
-  const headers = ["h2h.date", "h2h.tournament", "h2h.home", "h2h.score", "h2h.away", "h2h.season", "h2h.result"];
+  const headers = ["h2h.date", "h2h.tournament", "h2h.home", "h2h.score", "h2h.away"];
   if (!matches.length) return <div className="text-center py-8 text-text-muted text-sm">{t("empty.noMatches")}</div>;
   return (
     <div className="overflow-x-auto">
@@ -94,21 +94,7 @@ function MatchTable({ matches, refTeam, navigate, timezone, t }: {
           </tr>
         </thead>
         <tbody>
-          {matches.map((ev, i) => {
-            let resultEl = <span>-</span>;
-            if (ev.wnr != null && ev.st === "finished") {
-              const isHome = refTeam === ev.hnm;
-              const wdl = isHome
-                ? (ev.wnr === 1 ? "W" : ev.wnr === 0 ? "D" : "L")
-                : (ev.wnr === 1 ? "L" : ev.wnr === 0 ? "D" : "W");
-              const colorMap: Record<string, string> = {
-                W: "text-[#4caf50] bg-[#4caf50]/10",
-                D: "text-[#f4c542] bg-[#f4c542]/10",
-                L: "text-[#e53935] bg-[#e53935]/10",
-              };
-              resultEl = <span className={`text-[11px] font-semibold px-2 py-0.5 rounded ${colorMap[wdl]}`}>{wdl}</span>;
-            }
-            return (
+          {matches.map((ev, i) => (
               <tr
                 key={ev.mid}
                 onClick={() => navigate(`/match/${matchSlug(ev.hnm || "", ev.anm || "")}/${ev.mid}`)}
@@ -141,19 +127,14 @@ function MatchTable({ matches, refTeam, navigate, timezone, t }: {
                     <span className="text-xs text-text-muted">{t("h2h.vs")}</span>
                   )}
                 </td>
-                <td className="py-2.5 px-3 text-center font-semibold text-text-primary border-b border-border-subtle">
+                <td className="py-2.5 px-3 text-center font-semibold text-text-primary border-b border-border-subtle rounded-r-md">
                   <span className="flex items-center justify-center gap-1.5">
                     <TeamAvatar id={ev.aid} name={ev.anm || ""} className="w-5 h-5 object-contain rounded-full shrink-0" />
                     {ev.anm || "-"}
                   </span>
                 </td>
-                <td className="py-2.5 px-3 text-xs text-text-muted border-b border-border-subtle">{ev.snm || "-"}</td>
-                <td className="py-2.5 px-3 text-center border-b border-border-subtle rounded-r-md">
-                  {resultEl}
-                </td>
               </tr>
-            );
-          })}
+          ))}
         </tbody>
       </table>
     </div>
@@ -439,10 +420,12 @@ export default function MatchDetail() {
   })();
   const isHT = info?.sc === 31 || info?.sc === 33;
   const heroGradient = isLive
-    ? "bg-gradient-to-br from-[#0d47a1]/35 via-[#1565C0]/15 to-[#0d47a1]/35 border-[#4fc3f7]/25"
+    ? "bg-gradient-to-br from-[#0d47a1]/50 via-[#1565C0]/25 to-[#0d47a1]/50 border-[#4fc3f7]/30 shadow-lg shadow-[#1565C0]/10"
     : isHT
-      ? "bg-gradient-to-br from-[#e6a23c]/12 via-[#e6a23c]/4 to-[#e6a23c]/12 border-[#e6a23c]/20"
-      : "bg-surface border-border";
+      ? "bg-gradient-to-br from-[#e6a23c]/25 via-[#e6a23c]/10 to-[#e6a23c]/25 border-[#e6a23c]/30 shadow-lg shadow-[#e6a23c]/10"
+      : info && info.sc >= 100
+        ? "bg-gradient-to-br from-surface-alt/80 via-surface to-surface-alt/80 border-border"
+        : "bg-gradient-to-br from-[#1a3a2a]/30 via-surface to-[#1a3a2a]/30 border-border";
 
   /* ---- Render ---- */
   return (
@@ -481,6 +464,20 @@ export default function MatchDetail() {
               })}
             </script>
           </Helmet>
+
+          {/* Breadcrumb */}
+          <nav className="flex items-center gap-1.5 text-xs mb-4 text-text-muted" aria-label="Breadcrumb">
+            <button onClick={() => navigate("/?status=1")} className="hover:text-accent transition-colors cursor-pointer flex items-center gap-1">
+              <svg className="w-3.5 h-3.5" viewBox="-2500 -2500 5000 5000" fill="none" xmlns="http://www.w3.org/2000/svg"><g stroke="currentColor" strokeWidth="200"><circle fill="none" r="2376"/><path d="m-1643-1716 155 158m-550 2364c231 231 538 195 826 202m-524-2040c-491 351-610 1064-592 1060m1216-1008c-51 373 84 783 364 1220m-107-2289c157-157 466-267 873-329m-528 4112c-50 132-37 315-8 510m62-3883c282 32 792 74 1196 303m-404 2644c310 173 649 247 1060 180m-340-2008c-242 334-534 645-872 936m1109-2119c-111-207-296-375-499-534m1146 1281c100 3 197 44 290 141m-438 495c158 297 181 718 204 1140"/></g><path fill="currentColor" d="m-1624-1700c243-153 498-303 856-424 141 117 253 307 372 492-288 275-562 544-724 756-274-25-410-2-740-60 3-244 84-499 236-764zm2904-40c271 248 537 498 724 788-55 262-105 553-180 704-234-35-536-125-820-200-138-357-231-625-340-924 210-156 417-296 616-368zm-3273 3033a2376 2376 0 0 1-378-1392l59-7c54 342 124 674 311 928-36 179-2 323 51 458zm1197-1125c365 60 717 120 1060 180 106 333 120 667 156 1000-263 218-625 287-944 420-372-240-523-508-736-768 122-281 257-561 464-832zm3013 678a2376 2376 0 0 1-925 1147l-116-5c84-127 114-297 118-488 232-111 464-463 696-772 86 30 159 72 227 118zm-2287 1527a2376 2376 0 0 1-993-251c199 74 367 143 542 83 53 75 176 134 451 168z"/></svg>
+              {t("sport.football")}
+            </button>
+            <svg className="w-3 h-3 text-text-muted/50" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
+            <button onClick={() => navigate(`/?status=${info.sc === 0 ? "0" : info.sc >= 100 ? "-1" : "1"}`)} className="hover:text-accent transition-colors cursor-pointer truncate max-w-[200px]">
+              {info.tnm}
+            </button>
+            <svg className="w-3 h-3 text-text-muted/50 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
+            <span className="text-text-primary font-medium truncate">{info.hnm} vs {info.anm}</span>
+          </nav>
 
           {/* Hero */}
           <div className={`mb-5 p-5 md:p-6 rounded-2xl border relative overflow-hidden before:absolute before:top-0 before:left-0 before:right-0 before:h-[3px] ${heroGradient}
@@ -754,15 +751,15 @@ export default function MatchDetail() {
                 {[1, 2, 3].map(i => <div key={i} className="h-4 bg-skeleton-from rounded animate-pulse" />)}
               </div>
             ) : commentary.length > 0 ? (
-              <div className="relative py-1 before:absolute before:left-[70px] before:top-2 before:bottom-2 before:w-px before:bg-border">
+              <div className="relative py-1 before:absolute before:left-[58px] before:top-2 before:bottom-2 before:w-px before:bg-border">
                 {commentary.map((c) => (
                   <div
                     key={c.sq}
-                    className={`flex items-start gap-3 px-2 py-3 relative group rounded-xl transition-colors hover:bg-accent/3 ${c.ih ? "" : ""}`}
+                    className={`flex items-start gap-3 px-2 py-3 relative group rounded-xl transition-colors hover:bg-accent/3`}
                   >
-                    {/* Time badge */}
-                    <span className="text-[11px] font-bold text-accent bg-accent/8 min-w-[54px] text-center shrink-0 mt-0.5 py-0.5 px-1.5 rounded-md tabular-nums">
-                      {c.tp}
+                    {/* Time — show minute if available, otherwise type text */}
+                    <span className="text-xs font-bold text-accent bg-accent/8 min-w-[42px] text-center shrink-0 mt-0.5 py-0.5 px-1.5 rounded-md tabular-nums">
+                      {c.tm != null ? `${c.tm}'` : c.tp}
                     </span>
 
                     {/* Timeline dot */}

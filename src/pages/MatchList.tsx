@@ -297,21 +297,27 @@ export default function MatchList() {
 
       {/* Status tabs */}
       <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
-        <div className="flex bg-surface-muted rounded-md p-0.5">
+        <div className="flex bg-surface-muted rounded-lg p-0.5 gap-0.5">
           {[
-            { label: t("status.live"), value: "1" },
-            { label: t("status.scheduled"), value: "0" },
-            { label: t("status.finished"), value: "-1" },
+            { label: t("status.live"), value: "1", icon: "live" },
+            { label: t("status.scheduled"), value: "0", icon: "scheduled" },
+            { label: t("status.finished"), value: "-1", icon: "finished" },
           ].map((o) => (
             <button
               key={o.value}
               onClick={() => setStatusFilter(o.value)}
-              className={`text-xs px-3 py-1 rounded cursor-pointer transition-all whitespace-nowrap
+              className={`text-xs px-3.5 py-1.5 rounded-md cursor-pointer transition-all duration-200 whitespace-nowrap flex items-center gap-1.5
                 ${statusFilter === o.value
-                  ? "bg-accent text-white font-semibold"
-                  : "text-text-muted hover:text-text-primary"
+                  ? "bg-accent text-white font-semibold shadow-md shadow-accent/25 scale-[1.02]"
+                  : "text-text-muted hover:text-text-primary hover:bg-black/5 dark:hover:bg-white/5"
                 }`}
             >
+              {/* Status indicator dot */}
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                o.icon === "live" ? (statusFilter === o.value ? "bg-green-300 animate-pulse" : "bg-red-400") :
+                o.icon === "scheduled" ? (statusFilter === o.value ? "bg-blue-200" : "bg-amber-400") :
+                statusFilter === o.value ? "bg-white/60" : "bg-text-muted"
+              }`} />
               {o.label}
             </button>
           ))}
