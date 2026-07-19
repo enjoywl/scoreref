@@ -74,9 +74,8 @@ function getIncidentIcon(tp: string, cl?: string) {
 }
 
 /* ---- Match table (shared by H2H / team fixtures) ---- */
-function MatchTable({ matches, refTeam, navigate, timezone, t }: {
+function MatchTable({ matches, navigate, timezone, t }: {
   matches: H2hMatch[];
-  refTeam: string;
   navigate: (path: string) => void;
   timezone: string;
   t: (key: string, params?: Record<string, string | number>) => string;
@@ -872,7 +871,7 @@ export default function MatchDetail() {
                       </select>
                     </div>
                   </div>
-                  <MatchTable matches={h2h.h2h.slice(0, h2hLimit.h2h)} refTeam={info.hnm} navigate={navigate} timezone={timezone} t={t} />
+                  <MatchTable matches={h2h.h2h.slice(0, h2hLimit.h2h)} navigate={navigate} timezone={timezone} t={t} />
                 </section>
 
                 {/* Block 2: Home team fixtures */}
@@ -909,7 +908,6 @@ export default function MatchDetail() {
                   </div>
                   <MatchTable
                     matches={h2h.home[teamTab.home].slice(0, h2hLimit.home)}
-                    refTeam={info.hnm}
                     navigate={navigate}
                     timezone={timezone}
                     t={t}
@@ -950,7 +948,6 @@ export default function MatchDetail() {
                   </div>
                   <MatchTable
                     matches={h2h.away[teamTab.away].slice(0, h2hLimit.away)}
-                    refTeam={info.anm}
                     navigate={navigate}
                     timezone={timezone}
                     t={t}
