@@ -1,0 +1,12 @@
+<svg height="48" width="48" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+  <!-- yellow card behind, rotated right -->
+  <g transform="rotate(22,24,24)">
+    <rect stroke-width="1.5" stroke="#ca8a04" fill="#facc15" rx="2.5" height="32" width="20" y="8" x="14" />
+    <rect opacity="0.35" fill="#eab308" rx="1" height="24" width="14" y="12" x="17" />
+  </g>
+  <!-- red card in front, rotated left -->
+  <g transform="rotate(-22,24,24)">
+    <rect stroke-width="1.5" stroke="#b91c1c" fill="#ef4444" rx="2.5" height="32" width="20" y="8" x="14" />
+    <rect opacity="0.35" fill="#dc2626" rx="1" height="24" width="14" y="12" x="17" />
+  </g>
+</svg>
