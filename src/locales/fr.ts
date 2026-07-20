@@ -36,6 +36,8 @@ export default {
     ap: "T.A.B.",
   },
   tab: {
+    overview: "Aperçu",
+    summary: "Résumé",
     incidents: "Incidents",
     stats: "Stats",
     commentary: "Commentaire",
@@ -72,6 +74,7 @@ export default {
     assist: "A",
     redCard: "Carton Rouge",
     yellowCard: "Carton Jaune",
+    yellowRedCard: "Deuxième Jaune",
   },
   lineups: {
     substitutes: "Remplaçants",
@@ -94,6 +97,13 @@ export default {
   },
   pitch: {
     captain: "Capitaine",
+  },
+  period: {
+    ALL: "Complet",
+    "1ST": "1ère Mi-temps",
+    "2ND": "2ème Mi-temps",
+    ET1: "ET1",
+    ET2: "ET2",
   },
   timezone: "Fuseau horaire",
   weekdays: ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"],
@@ -143,6 +153,9 @@ export default {
     goalsPrevented: "Buts évités",
     highClaims: "Prises de balle hautes",
     goalKicks: "Dégagements aux 6 mètres",
+    attacks: "Attaques",
+    dangerousAttacks: "Attaques Dangereuses",
+    redCards: "Cartons Rouges",
   },
   statGroups: {
     "Match overview": "Aperçu",

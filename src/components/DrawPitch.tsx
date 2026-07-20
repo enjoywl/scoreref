@@ -1,8 +1,14 @@
 import { useState, type ReactNode } from "react";
 import { useI18n } from "../locales";
+import redCardSvg from "../icon/red_card.svg";
+import yellowCardSvg from "../icon/yellow_card.svg";
+import yellowredCardSvg from "../icon/yellowred_card.svg";
+import subInSvg from "../icon/substition_in.svg";
+import subOutSvg from "../icon/substition_out.svg";
 
 interface Player {
   nm: string; sn: string; sh: number; pos: string; sub: boolean; cap?: boolean; pid?: number; age?: number;
+  mp?: number; cards?: string[]; subInMin?: number; subOutMin?: number;
 }
 
 interface PositionedPlayer extends Player {
@@ -141,8 +147,46 @@ function PlayerPhoto({ x, y, r, pid, name, fallback }: {
   );
 }
 
-function PlayerNode({ p, color, captainLabel }: { p: PositionedPlayer; color: string; isHome?: boolean; captainLabel: string }) {
+function PlayerNode({ p, color, isHome, captainLabel }: { p: PositionedPlayer; color: string; isHome?: boolean; captainLabel: string }) {
   const r = 21;
+  const nameY = p._y + r + 16;
+
+  const cardList = p.cards || [];
+  const hasMp = p.mp != null;
+  const hasSubIndicators = p.subInMin != null || p.subOutMin != null;
+  const hasInfo = hasMp || cardList.length > 0 || hasSubIndicators;
+
+  // Badge layout above the player circle
+  const badgeH = 18;
+  const cardW = 11; const cardH = 16;
+  const subW = 9; const subH = 16;
+  const gap = 3;
+
+  // Minutes pill: team-colored, wider
+  const mpText = hasMp ? `${p.mp}'` : "";
+  const mpW = mpText.length <= 3 ? 26 : 32;
+
+  // Compute total width
+  let totalW = 0;
+  if (hasMp) totalW += mpW;
+  if (p.subInMin != null) totalW += (totalW > 0 ? gap : 0) + subW;
+  if (p.subOutMin != null) totalW += (totalW > 0 ? gap : 0) + subW;
+  for (let ci = 0; ci < cardList.length; ci++) totalW += (totalW > 0 ? gap : 0) + cardW;
+
+  const badgeStartX = p._x - totalW / 2;
+  const badgeY = p._y - r - badgeH - 4; // above circle
+
+  // Build positioned badge elements
+  const badges: Array<{ x: number; w: number } & (
+    { kind: "mp"; text: string } |
+    { kind: "card"; card: string } |
+    { kind: "sub"; icon: "in" | "out" }
+  )> = [];
+  let cx = badgeStartX;
+  if (hasMp) { badges.push({ kind: "mp", text: mpText, x: cx, w: mpW }); cx += mpW + gap; }
+  if (p.subInMin != null) { badges.push({ kind: "sub", icon: "in", x: cx, w: subW }); cx += subW + gap; }
+  if (p.subOutMin != null) { badges.push({ kind: "sub", icon: "out", x: cx, w: subW }); cx += subW + gap; }
+  for (const c of cardList) { badges.push({ kind: "card", card: c, x: cx, w: cardW }); cx += cardW + gap; }
 
   return (
     <g>
@@ -160,8 +204,38 @@ function PlayerNode({ p, color, captainLabel }: { p: PositionedPlayer; color: st
           <text x={p._x + r - 2} y={p._y - r + 5.5} textAnchor="middle" fontSize="7" fontWeight="900" fill="#000">C</text>
         </>
       )}
+      {/* Head info badges above circle */}
+      {hasInfo && badges.map((b, i) => {
+        if (b.kind === "mp") {
+          return (
+            <g key={i}>
+              <rect x={b.x} y={badgeY} width={b.w} height={badgeH} rx="9" fill={color} stroke="#fff" strokeWidth="1.5" />
+              <text x={b.x + b.w / 2} y={badgeY + badgeH / 2 + 1} textAnchor="middle" fontSize="11" fontWeight="800" fill="#fff"
+                style={{ fontVariantNumeric: "tabular-nums" }}>{b.text}</text>
+            </g>
+          );
+        }
+        if (b.kind === "card") {
+          const src = b.card === "red" ? redCardSvg : b.card === "yellowRed" ? yellowredCardSvg : yellowCardSvg;
+          return (
+            <g key={i}>
+              <rect x={b.x} y={badgeY + 1} width={b.w} height={badgeH - 2} rx="2" fill="rgba(0,0,0,0.55)" stroke="rgba(255,255,255,0.3)" strokeWidth="1" />
+              <image href={src} x={b.x + 1} y={badgeY + 2} width={b.w - 2} height={badgeH - 4} preserveAspectRatio="xMidYMid slice" />
+            </g>
+          );
+        }
+        // sub icon
+        const src = b.icon === "in" ? subInSvg : subOutSvg;
+        const subColor = b.icon === "in" ? "#22C55E" : "#EF4444";
+        return (
+          <g key={i}>
+            <rect x={b.x} y={badgeY + 1} width={b.w} height={badgeH - 2} rx="4" fill="rgba(0,0,0,0.55)" stroke={subColor} strokeWidth="1.5" />
+            <image href={src} x={b.x + 1} y={badgeY + 2} width={b.w - 2} height={badgeH - 4} preserveAspectRatio="xMidYMid slice" />
+          </g>
+        );
+      })}
       {/* Name — centered below circle */}
-      <text x={p._x} y={p._y + r + 16} textAnchor="middle" fontSize="10" fontWeight="600" fill="#fff"
+      <text x={p._x} y={nameY} textAnchor="middle" fontSize="10" fontWeight="600" fill="#fff"
         style={{ textShadow: "0 1px 3px rgba(0,0,0,0.85)" }}>{p.sn}</text>
     </g>
   );

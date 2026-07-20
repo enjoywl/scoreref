@@ -36,6 +36,8 @@ export default {
     ap: "승부차기",
   },
   tab: {
+    overview: "경기 개요",
+    summary: "요약",
     incidents: "이벤트",
     stats: "통계",
     commentary: "중계",
@@ -72,6 +74,7 @@ export default {
     assist: "A",
     redCard: "레드카드",
     yellowCard: "옐로카드",
+    yellowRedCard: "경고 누적 퇴장",
   },
   lineups: {
     substitutes: "교체 선수",
@@ -94,6 +97,13 @@ export default {
   },
   pitch: {
     captain: "주장",
+  },
+  period: {
+    ALL: "전체",
+    "1ST": "전반",
+    "2ND": "후반",
+    ET1: "ET1",
+    ET2: "ET2",
   },
   timezone: "시간대",
   weekdays: ["일", "월", "화", "수", "목", "금", "토"],
@@ -143,6 +153,9 @@ export default {
     goalsPrevented: "실점 방지",
     highClaims: "하이볼 캐치",
     goalKicks: "골킥",
+    attacks: "공격",
+    dangerousAttacks: "위협적인 공격",
+    redCards: "레드카드",
   },
   statGroups: {
     "Match overview": "경기 개요",

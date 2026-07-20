@@ -36,6 +36,8 @@ export default {
     ap: "Pên.",
   },
   tab: {
+    overview: "Visão Geral",
+    summary: "Resumo",
     incidents: "Incidentes",
     stats: "Estatísticas",
     commentary: "Comentário",
@@ -72,6 +74,7 @@ export default {
     assist: "A",
     redCard: "Cartão Vermelho",
     yellowCard: "Cartão Amarelo",
+    yellowRedCard: "Segundo Amarelo",
   },
   lineups: {
     substitutes: "Suplentes",
@@ -94,6 +97,13 @@ export default {
   },
   pitch: {
     captain: "Capitão",
+  },
+  period: {
+    ALL: "Completo",
+    "1ST": "1º Tempo",
+    "2ND": "2º Tempo",
+    ET1: "ET1",
+    ET2: "ET2",
   },
   timezone: "Fuso horário",
   weekdays: ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"],
@@ -143,6 +153,9 @@ export default {
     goalsPrevented: "Gols evitados",
     highClaims: "Saídas do gol",
     goalKicks: "Tiros de meta",
+    attacks: "Ataques",
+    dangerousAttacks: "Ataques Perigosos",
+    redCards: "Cartões Vermelhos",
   },
   statGroups: {
     "Match overview": "Visão geral",

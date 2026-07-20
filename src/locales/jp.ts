@@ -36,6 +36,8 @@ export default {
     ap: "PK",
   },
   tab: {
+    overview: "試合概要",
+    summary: "サマリー",
     incidents: "出来事",
     stats: "統計",
     commentary: "実況",
@@ -72,6 +74,7 @@ export default {
     assist: "A",
     redCard: "レッドカード",
     yellowCard: "イエローカード",
+    yellowRedCard: "2枚目のイエロー",
   },
   lineups: {
     substitutes: "控え選手",
@@ -94,6 +97,13 @@ export default {
   },
   pitch: {
     captain: "キャプテン",
+  },
+  period: {
+    ALL: "全体",
+    "1ST": "前半",
+    "2ND": "後半",
+    ET1: "ET1",
+    ET2: "ET2",
   },
   timezone: "タイムゾーン",
   weekdays: ["日", "月", "火", "水", "木", "金", "土"],
@@ -143,6 +153,9 @@ export default {
     goalsPrevented: "阻止ゴール",
     highClaims: "ハイボールキャッチ",
     goalKicks: "ゴールキック",
+    attacks: "攻撃",
+    dangerousAttacks: "危険な攻撃",
+    redCards: "レッドカード",
   },
   statGroups: {
     "Match overview": "試合概要",

@@ -36,6 +36,8 @@ export default {
     ap: "点球",
   },
   tab: {
+    overview: "赛况",
+    summary: "数据概要",
     incidents: "事件",
     stats: "统计",
     commentary: "文字直播",
@@ -72,6 +74,7 @@ export default {
     assist: "A",
     redCard: "红牌",
     yellowCard: "黄牌",
+    yellowRedCard: "两黄变红",
   },
   lineups: {
     substitutes: "替补",
@@ -94,6 +97,13 @@ export default {
   },
   pitch: {
     captain: "队长",
+  },
+  period: {
+    ALL: "全场",
+    "1ST": "上半场",
+    "2ND": "下半场",
+    ET1: "ET1",
+    ET2: "ET2",
   },
   timezone: "时区",
   weekdays: ["周日", "周一", "周二", "周三", "周四", "周五", "周六"],
@@ -143,6 +153,9 @@ export default {
     goalsPrevented: "阻止进球",
     highClaims: "高空球控制",
     goalKicks: "球门球",
+    attacks: "进攻",
+    dangerousAttacks: "危险进攻",
+    redCards: "红牌",
   },
   statGroups: {
     "Match overview": "比赛概况",

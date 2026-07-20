@@ -8,7 +8,7 @@
   "assets": {
     "directory": "./dist",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/v1/*", "/match/*"]
+    "run_worker_first": ["/v1/*"]
   },
   "vars": {
     "API_SERVER": "http://localhost:3000"

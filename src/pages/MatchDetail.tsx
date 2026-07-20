@@ -7,6 +7,12 @@ import { matchSlug } from "../lib/slug";
 import { useTimezone, formatKickoffTime, formatDateShort } from "../lib/timezone";
 import { TeamAvatar, LeagueAvatar } from "../components/Avatar";
 import DrawPitch from "../components/DrawPitch";
+import bootSvg from "../icon/boot.svg";
+import redCardSvg from "../icon/red_card.svg";
+import yellowCardSvg from "../icon/yellow_card.svg";
+import yellowredCardSvg from "../icon/yellowred_card.svg";
+import subInSvg from "../icon/substition_in.svg";
+import subOutSvg from "../icon/substition_out.svg";
 
 /* ---- Types ---- */
 interface MatchInfo {
@@ -31,7 +37,7 @@ interface Incident {
 
 interface CommentaryItem { tx: string; tp: string; ih: boolean; sq: number; pnm?: string; tm?: number; }
 
-interface LineupPlayer { nm: string; sn: string; sh: number; pos: string; sub: boolean; cap?: boolean; pid?: number; age?: number; }
+interface LineupPlayer { nm: string; sn: string; sh: number; pos: string; sub: boolean; cap?: boolean; pid?: number; age?: number; mp?: number; cards?: string[]; subInMin?: number; subOutMin?: number; }
 
 interface StatItem { k: string; nm: string; hn: number; an: number; hv: string; av: string; rt: number; }
 
@@ -58,19 +64,50 @@ function MatchTimeText({ time, sc }: { time: string; sc: number }) {
 
 function getIncidentIcon(tp: string, cl?: string) {
   const t = (tp || "").toLowerCase();
-  if (t === "period") return { icon: "", cls: "period" };
-  if (t === "injurytime") return { icon: "", cls: "injury" };
-  if (t === "card" && cl === "red") return { icon: "\u25AE", cls: "red" };
-  if (t === "card" && cl === "yellow") return { icon: "\u25AE", cls: "yellow" };
-  if (t === "goal" && cl === "own") return { icon: "\u26BD", cls: "own" };
-  if (t === "goal" && cl === "penalty") return { icon: "\u26BD", cls: "penalty" };
-  if (t === "goal") return { icon: "\u26BD", cls: "goal" };
-  if (t === "substitution") return { icon: "\u2194", cls: "sub" };
+  if (t === "period") return { icon: null, cls: "period" };
+  if (t === "injurytime") return { icon: null, cls: "injury" };
+  if (t === "card" && cl === "red") return { icon: <img src={redCardSvg} className="w-4 h-4" alt="" />, cls: "red" };
+  if (t === "card" && cl === "yellow") return { icon: <img src={yellowCardSvg} className="w-4 h-4" alt="" />, cls: "yellow" };
+  if (t === "card" && cl === "yellowRed") return { icon: <img src={yellowredCardSvg} className="w-4 h-4" alt="" />, cls: "red" };
+  if (t === "goal" && cl === "own") return { icon: null, cls: "own" };
+  if (t === "goal" && cl === "penalty") return { icon: null, cls: "penalty" };
+  if (t === "goal") return { icon: null, cls: "goal" };
+  if (t === "substitution") return { icon: null, cls: "sub" };
   if (t === "vardecision") return { icon: "\u25B7", cls: "var" };
   if (t === "ingamepenalty" && cl === "missed") return { icon: "\u2715", cls: "miss" };
-  if (t === "ingamepenalty" && cl === "scored") return { icon: "\u26BD", cls: "penalty" };
-  if (t === "ingamepenalty") return { icon: "\u26BD", cls: "penalty" };
+  if (t === "ingamepenalty" && cl === "scored") return { icon: null, cls: "penalty" };
+  if (t === "ingamepenalty") return { icon: null, cls: "penalty" };
   return { icon: "\u25CF", cls: "other" };
+}
+
+interface PlayerEventInfo {
+  cards: string[];
+  subIn?: number;
+  subOut?: number;
+}
+
+function buildPlayerEventMap(incidents: Incident[]): Map<number, PlayerEventInfo> {
+  const map = new Map<number, PlayerEventInfo>();
+  for (const ev of incidents) {
+    if (ev.tp === "card" && ev.cl && ev.pid) {
+      const entry = map.get(ev.pid) || { cards: [] };
+      entry.cards.push(ev.cl);
+      map.set(ev.pid, entry);
+    }
+    if (ev.tp === "substitution") {
+      if (ev.poi && ev.tm != null) {
+        const entry = map.get(ev.poi) || { cards: [] };
+        entry.subOut = ev.tm;
+        map.set(ev.poi, entry);
+      }
+      if (ev.pii && ev.tm != null) {
+        const entry = map.get(ev.pii) || { cards: [] };
+        entry.subIn = ev.tm;
+        map.set(ev.pii, entry);
+      }
+    }
+  }
+  return map;
 }
 
 /* ---- Match table (shared by H2H / team fixtures) ---- */
@@ -88,7 +125,7 @@ function MatchTable({ matches, navigate, timezone, t }: {
         <thead>
           <tr>
             {headers.map(h => (
-              <th key={h} className="sticky top-0 py-2 px-2.5 text-[11px] font-semibold text-text-muted text-left whitespace-nowrap border-b-2 border-border bg-surface">{t(h)}</th>
+              <th key={h} className="sticky top-0 py-2 px-2.5 text-xs font-semibold text-text-muted text-left whitespace-nowrap border-b-2 border-border bg-surface">{t(h)}</th>
             ))}
           </tr>
         </thead>
@@ -99,10 +136,10 @@ function MatchTable({ matches, navigate, timezone, t }: {
                 onClick={() => navigate(`/match/${matchSlug(ev.hnm || "", ev.anm || "")}/${ev.mid}`)}
                 className={`cursor-pointer transition-all hover:bg-accent/4 dark:hover:bg-accent/8 active:scale-[0.995] ${i % 2 === 1 ? "bg-black/[0.015] dark:bg-white/[0.02]" : ""}`}
               >
-                <td className="py-2.5 px-3 text-xs text-text-secondary border-b border-border-subtle whitespace-nowrap rounded-l-md">
+                <td className="py-2.5 px-3 text-[13px] text-text-secondary border-b border-border-subtle whitespace-nowrap rounded-l-md">
                   {ev.sts ? formatDateShort(ev.sts, timezone) : "-"}
                 </td>
-                <td className="py-2.5 px-3 text-xs text-text-muted border-b border-border-subtle max-w-[140px] truncate">
+                <td className="py-2.5 px-3 text-[13px] text-text-muted border-b border-border-subtle max-w-[140px] truncate">
                   <span className="flex items-center gap-1.5">
                     <LeagueAvatar id={ev.tid} name={ev.tnm || ""} className="w-[16px] h-[16px] object-contain rounded shrink-0" />
                     {ev.tnm || "-"}
@@ -117,13 +154,13 @@ function MatchTable({ matches, navigate, timezone, t }: {
                 <td className="py-2.5 px-3 text-center border-b border-border-subtle">
                   {ev.hsc != null && ev.asc != null ? (
                     <>
-                      <span className="font-bold text-text-primary tabular-nums text-sm">{ev.hsc} - {ev.asc}</span>
+                      <span className="font-bold text-text-primary tabular-nums text-[15px]">{ev.hsc} - {ev.asc}</span>
                       {(ev.hs1 != null || ev.as1 != null) && (
                         <span className="text-[11px] text-text-muted ml-1">({ev.hs1 ?? 0} - {ev.as1 ?? 0})</span>
                       )}
                     </>
                   ) : (
-                    <span className="text-xs text-text-muted">{t("h2h.vs")}</span>
+                    <span className="text-[13px] text-text-muted">{t("h2h.vs")}</span>
                   )}
                 </td>
                 <td className="py-2.5 px-3 text-center font-semibold text-text-primary border-b border-border-subtle rounded-r-md">
@@ -136,6 +173,64 @@ function MatchTable({ matches, navigate, timezone, t }: {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+/* ---- Overview stat chart helpers ---- */
+function DonutStat({ homeVal, awayVal, label, homeColor, awayColor }: {
+  homeVal: number; awayVal: number; label: string; homeColor: string; awayColor: string;
+}) {
+  const total = homeVal + awayVal || 1;
+  const homePct = Math.round((homeVal / total) * 100);
+  const r = 30;
+  const circumference = 2 * Math.PI * r;
+  const homeDash = (circumference * homeVal) / total;
+  return (
+    <div className="flex flex-col items-center gap-1.5">
+      <div className="relative w-[76px] h-[76px]">
+        <svg width="76" height="76" viewBox="0 0 76 76" className="-rotate-90">
+          <circle cx="38" cy="38" r={r} fill="none" stroke={awayColor} strokeWidth="6" opacity="0.25" />
+          <circle cx="38" cy="38" r={r} fill="none" stroke={homeColor} strokeWidth="6"
+            strokeDasharray={`${homeDash} ${circumference - homeDash}`}
+            strokeLinecap="round" />
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-[15px] font-extrabold text-text-primary leading-none">{homePct}%</span>
+          <span className="text-[10px] text-text-muted mt-0.5">vs {100 - homePct}%</span>
+        </div>
+      </div>
+      <span className="text-[13px] text-text-secondary text-center leading-tight font-medium">{label}</span>
+      <div className="flex items-center gap-1.5 text-xs">
+        <span className="font-bold text-[#1565C0] tabular-nums">{homeVal}</span>
+        <span className="text-text-muted">-</span>
+        <span className="font-bold text-[#C62828] tabular-nums">{awayVal}</span>
+      </div>
+    </div>
+  );
+}
+
+function BarStat({ homeVal, awayVal, label, homeColor, awayColor }: {
+  homeVal: number; awayVal: number; label: string; homeColor: string; awayColor: string;
+}) {
+  const max = Math.max(homeVal, awayVal, 1);
+  const homePct = Math.round((homeVal / max) * 100);
+  const awayPct = Math.round((awayVal / max) * 100);
+  return (
+    <div className="flex-1 min-w-0">
+      <span className="text-[13px] text-text-secondary text-center block mb-1.5 font-medium">{label}</span>
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-bold text-[#1565C0] tabular-nums w-7 text-right shrink-0">{homeVal}</span>
+        <div className="flex-1 flex flex-col gap-1">
+          <div className="h-2 bg-border-light rounded-full overflow-hidden flex justify-end">
+            <div className="h-full rounded-full transition-all duration-600" style={{ width: `${homePct}%`, backgroundColor: homeColor }} />
+          </div>
+          <div className="h-2 bg-border-light rounded-full overflow-hidden">
+            <div className="h-full rounded-full transition-all duration-600" style={{ width: `${awayPct}%`, backgroundColor: awayColor }} />
+          </div>
+        </div>
+        <span className="text-sm font-bold text-[#C62828] tabular-nums w-7 text-left shrink-0">{awayVal}</span>
+      </div>
     </div>
   );
 }
@@ -162,7 +257,9 @@ export default function MatchDetail() {
   const [teamTab, setTeamTab] = useState<{ home: "recent" | "upcoming"; away: "recent" | "upcoming" }>({ home: "recent", away: "recent" });
   const [h2hLimit, setH2hLimit] = useState<Record<string, number>>({ h2h: 6, home: 6, away: 6 });
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("incidents");
+  const [activeTab, setActiveTab] = useState("overview");
+  const [selectedPeriod, setSelectedPeriod] = useState("ALL");
+
   // Track which data has been fetched (for lazy loading)
   const [fetched, setFetched] = useState({ commentary: false, stats: false, lineups: false, h2h: false });
 
@@ -185,7 +282,9 @@ export default function MatchDetail() {
   }
 
   const loadMatchData = useCallback(async (matchId: string) => {
-    setActiveTab("incidents");
+    setActiveTab("overview");
+    setSelectedPeriod("ALL");
+
     setFetched({ commentary: false, stats: false, lineups: false, h2h: false });
     setCommentary([]);
     setStats([]);
@@ -224,9 +323,22 @@ export default function MatchDetail() {
     fetchJSON(`/v1/api/match/${mid}/lineups`).then(d => {
       setFetched(f => ({ ...f, lineups: true }));
       if (d) {
+        const evMap = buildPlayerEventMap(incidents);
+        const mapPlayer = (p: Record<string, unknown>): LineupPlayer => {
+          const pid = (p.pid ?? p.id) as number | undefined;
+          const ev = pid != null ? evMap.get(pid) : undefined;
+          return {
+            nm: p.nm as string, sn: p.sn as string, sh: p.sh as number, pos: p.pos as string, sub: p.sub as boolean,
+            cap: p.cap as boolean | undefined, pid, age: p.age as number | undefined,
+            mp: (p.st as Record<string, unknown> | undefined)?.mp as number | undefined,
+            cards: ev?.cards,
+            subInMin: ev?.subIn,
+            subOutMin: ev?.subOut,
+          };
+        };
         setLineups({
-          home: (d.hm?.pl || []).map((p: Record<string, unknown>) => ({ nm: p.nm, sn: p.sn, sh: p.sh, pos: p.pos, sub: p.sub, cap: p.cap, pid: (p.pid ?? p.id) as number | undefined, age: p.age } as LineupPlayer)),
-          away: (d.aw?.pl || []).map((p: Record<string, unknown>) => ({ nm: p.nm, sn: p.sn, sh: p.sh, pos: p.pos, sub: p.sub, cap: p.cap, pid: (p.pid ?? p.id) as number | undefined, age: p.age } as LineupPlayer)),
+          home: (d.hm?.pl || []).map(mapPlayer),
+          away: (d.aw?.pl || []).map(mapPlayer),
           hform: d.hm?.fm || "", aform: d.aw?.fm || "",
         });
       }
@@ -278,9 +390,22 @@ export default function MatchDetail() {
       fetchJSON(`/v1/api/match/${mid}/lineups`).then(d => {
         setFetched(f => ({ ...f, lineups: true }));
         if (d) {
+          const evMap = buildPlayerEventMap(incidents);
+          const mapPlayer = (p: Record<string, unknown>): LineupPlayer => {
+            const pid = (p.pid ?? p.id) as number | undefined;
+            const ev = pid != null ? evMap.get(pid) : undefined;
+            return {
+              nm: p.nm as string, sn: p.sn as string, sh: p.sh as number, pos: p.pos as string, sub: p.sub as boolean,
+              cap: p.cap as boolean | undefined, pid, age: p.age as number | undefined,
+              mp: (p.st as Record<string, unknown> | undefined)?.mp as number | undefined,
+              cards: ev?.cards,
+              subInMin: ev?.subIn,
+              subOutMin: ev?.subOut,
+            };
+          };
           setLineups({
-            home: (d.hm?.pl || []).map((p: Record<string, unknown>) => ({ nm: p.nm, sn: p.sn, sh: p.sh, pos: p.pos, sub: p.sub, cap: p.cap, pid: (p.pid ?? p.id) as number | undefined, age: p.age } as LineupPlayer)),
-            away: (d.aw?.pl || []).map((p: Record<string, unknown>) => ({ nm: p.nm, sn: p.sn, sh: p.sh, pos: p.pos, sub: p.sub, cap: p.cap, pid: (p.pid ?? p.id) as number | undefined, age: p.age } as LineupPlayer)),
+            home: (d.hm?.pl || []).map(mapPlayer),
+            away: (d.aw?.pl || []).map(mapPlayer),
             hform: d.hm?.fm || "", aform: d.aw?.fm || "",
           });
         }
@@ -401,7 +526,25 @@ export default function MatchDetail() {
     return info.sd || info.st || "";
   }, [info, t]);
 
-  const allStats = useMemo(() => stats.find(s => s.pr === "ALL") || stats[0], [stats]);
+  const { availablePeriods, currentPeriodStats } = useMemo(() => {
+    const periods = stats.map(s => s.pr);
+    const sel = periods.includes(selectedPeriod) ? selectedPeriod : periods[0];
+    const cur = stats.find(s => s.pr === sel) || stats[0];
+    return { availablePeriods: periods, currentPeriodStats: cur };
+  }, [stats, selectedPeriod]);
+
+  // Flatten ALL-period stats into a key→value map for overview lookups
+  const statMap = useMemo(() => {
+    const all = stats.find(s => s.pr === "ALL") || stats[0];
+    if (!all) return new Map<string, { hn: number; an: number; hv: string; av: string }>();
+    const m = new Map<string, { hn: number; an: number; hv: string; av: string }>();
+    for (const g of all.gr) {
+      for (const it of g.si) {
+        m.set(it.k, { hn: it.hn, an: it.an, hv: it.hv, av: it.av });
+      }
+    }
+    return m;
+  }, [stats]);
 
   const isLive = (() => {
     const sc = info?.sc;
@@ -465,7 +608,7 @@ export default function MatchDetail() {
           </Helmet>
 
           {/* Breadcrumb */}
-          <nav className="flex items-center gap-1.5 text-xs mb-4 text-text-muted" aria-label="Breadcrumb">
+          <nav className="flex items-center gap-1.5 text-[13px] mb-4 text-text-muted" aria-label="Breadcrumb">
             <button onClick={() => navigate("/?status=1")} className="hover:text-accent transition-colors cursor-pointer flex items-center gap-1">
               <svg className="w-3.5 h-3.5" viewBox="-2500 -2500 5000 5000" fill="none" xmlns="http://www.w3.org/2000/svg"><g stroke="currentColor" strokeWidth="200"><circle fill="none" r="2376"/><path d="m-1643-1716 155 158m-550 2364c231 231 538 195 826 202m-524-2040c-491 351-610 1064-592 1060m1216-1008c-51 373 84 783 364 1220m-107-2289c157-157 466-267 873-329m-528 4112c-50 132-37 315-8 510m62-3883c282 32 792 74 1196 303m-404 2644c310 173 649 247 1060 180m-340-2008c-242 334-534 645-872 936m1109-2119c-111-207-296-375-499-534m1146 1281c100 3 197 44 290 141m-438 495c158 297 181 718 204 1140"/></g><path fill="currentColor" d="m-1624-1700c243-153 498-303 856-424 141 117 253 307 372 492-288 275-562 544-724 756-274-25-410-2-740-60 3-244 84-499 236-764zm2904-40c271 248 537 498 724 788-55 262-105 553-180 704-234-35-536-125-820-200-138-357-231-625-340-924 210-156 417-296 616-368zm-3273 3033a2376 2376 0 0 1-378-1392l59-7c54 342 124 674 311 928-36 179-2 323 51 458zm1197-1125c365 60 717 120 1060 180 106 333 120 667 156 1000-263 218-625 287-944 420-372-240-523-508-736-768 122-281 257-561 464-832zm3013 678a2376 2376 0 0 1-925 1147l-116-5c84-127 114-297 118-488 232-111 464-463 696-772 86 30 159 72 227 118zm-2287 1527a2376 2376 0 0 1-993-251c199 74 367 143 542 83 53 75 176 134 451 168z"/></svg>
               {t("sport.football")}
@@ -488,7 +631,7 @@ export default function MatchDetail() {
             <div className="flex items-center gap-3 mb-5">
               <button
                 onClick={() => (window.history.length > 1 ? navigate(-1) : navigate("/"))}
-                className="text-xs font-semibold text-accent bg-accent/8 dark:bg-accent/10 px-3 py-1 rounded-2xl hover:bg-accent/20 transition-colors cursor-pointer"
+                className="text-[13px] font-semibold text-accent bg-accent/8 dark:bg-accent/10 px-3 py-1 rounded-2xl hover:bg-accent/20 transition-colors cursor-pointer"
               >
                 {t("matchInfo.back")}
               </button>
@@ -496,7 +639,7 @@ export default function MatchDetail() {
                 <LeagueAvatar id={info.tid} name={(info.tnm)} className="w-[18px] h-[18px] object-contain rounded shrink-0" />
                 {(info.tnm)}
               </span>
-              {info.rnm && <span className="text-xs text-text-muted shrink-0">{info.rnm}</span>}
+              {info.rnm && <span className="text-[13px] text-text-muted shrink-0">{info.rnm}</span>}
             </div>
 
             {/* Teams + score */}
@@ -509,8 +652,8 @@ export default function MatchDetail() {
               </div>
               <div className="flex flex-col items-center gap-0.5 sm:gap-1 shrink-0">
                 <span className="text-[32px] sm:text-[42px] font-black text-text-primary tracking-[2px] sm:tracking-[3px] tabular-nums leading-none">{info.hsc} - {info.asc}</span>
-                {info.sc >= 31 && <span className="text-xs sm:text-sm text-text-muted dark:text-white/40">({info.hs1} - {info.as1})</span>}
-                <span className={`text-xs sm:text-sm font-bold mt-0.5 sm:mt-1 px-2.5 sm:px-3.5 py-0.5 rounded-xl
+                {info.sc >= 31 && <span className="text-[13px] sm:text-sm text-text-muted dark:text-white/40">({info.hs1} - {info.as1})</span>}
+                <span className={`text-[13px] sm:text-sm font-bold mt-0.5 sm:mt-1 px-2.5 sm:px-3.5 py-0.5 rounded-xl
                   ${isLive ? "text-[#e53935]" : ""}
                   ${isHT ? "text-white bg-[#e6a23c]" : ""}
                   ${info.sc >= 100 ? "text-text-muted bg-surface-alt" : ""}`}
@@ -528,35 +671,14 @@ export default function MatchDetail() {
 
             {/* Info strip chips */}
             <div className="flex justify-center items-center gap-2 flex-wrap pt-4 border-t border-[#eee] dark:border-white/8">
-              {info.snm && <span className="text-xs text-text-secondary bg-[#f0f0f0] dark:bg-white/5 px-3 py-1 rounded-xl">{info.snm}</span>}
-              <span className="text-xs text-text-secondary bg-[#f0f0f0] dark:bg-white/5 px-3 py-1 rounded-xl">
+              {info.snm && <span className="text-[13px] text-text-secondary bg-[#f0f0f0] dark:bg-white/5 px-3 py-1 rounded-xl">{info.snm}</span>}
+              <span className="text-[13px] text-text-secondary bg-[#f0f0f0] dark:bg-white/5 px-3 py-1 rounded-xl">
                 {formatKickoffTime(info.sts, timezone)}
               </span>
-              {info.vnm && <span className="text-xs text-text-secondary bg-[#f0f0f0] dark:bg-white/5 px-3 py-1 rounded-xl">{info.vnm}</span>}
-              <span className="text-xs text-text-secondary bg-[#f0f0f0] dark:bg-white/5 px-3 py-1 rounded-xl">{t("matchInfo.ref")} {info.rfn || "-"}</span>
+              {info.vnm && <span className="text-[13px] text-text-secondary bg-[#f0f0f0] dark:bg-white/5 px-3 py-1 rounded-xl">{info.vnm}</span>}
+              <span className="text-[13px] text-text-secondary bg-[#f0f0f0] dark:bg-white/5 px-3 py-1 rounded-xl">{t("matchInfo.ref")} {info.rfn || "-"}</span>
             </div>
           </div>
-
-          {/* Match info grid — always visible */}
-          {info && (
-            <section className="mb-5">
-              <h3 className="text-[15px] font-semibold text-text-secondary mb-3 pb-1.5 border-b border-border">{t("matchInfo.title")}</h3>
-              <div className="grid grid-cols-2 gap-px bg-border rounded-lg overflow-hidden">
-                {[
-                  [t("matchInfo.status"), info.sd || info.st || "-"],
-                  [t("matchInfo.round"), info.rnm || "-"],
-                  [t("matchInfo.season"), info.snm || "-"],
-                  [t("matchInfo.referee"), info.rfn || "-"],
-                  ...(info.grp ? [[t("matchInfo.group"), info.grp]] : []),
-                ].map(([label, val]) => (
-                  <div key={label} className="flex justify-between py-2.5 px-3.5 bg-surface text-[13px] text-text-primary">
-                    <span className="text-[12px] text-text-muted">{label}</span>
-                    <span>{val}</span>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
 
           {/* Tabs */}
           <div className="border-b border-border mb-5">
@@ -567,7 +689,7 @@ export default function MatchDetail() {
                     { key: "h2h", label: t("tab.h2h") },
                   ]
                 : [
-                    { key: "incidents", label: t("tab.incidents") },
+                    { key: "overview", label: t("tab.overview") },
                     { key: "stats", label: t("tab.stats") },
                     { key: "commentary", label: t("tab.commentary") },
                     { key: "lineups", label: t("tab.lineups") },
@@ -581,7 +703,7 @@ export default function MatchDetail() {
                     if (tab.key === "lineups") loadLineups();
                     if (tab.key === "h2h") loadH2h();
                   }}
-                  className={`text-[13px] px-4 py-2.5 font-medium transition-colors cursor-pointer border-b-2 shrink-0
+                  className={`text-sm px-4 py-2.5 font-medium transition-colors cursor-pointer border-b-2 shrink-0
                     ${activeTab === tab.key
                       ? "text-accent border-accent"
                       : "text-text-muted border-transparent hover:text-text-muted"
@@ -599,15 +721,38 @@ export default function MatchDetail() {
               <div className="flex flex-col gap-3">
                 {[1, 2, 3].map(i => <div key={i} className="h-5 bg-skeleton-from rounded animate-pulse" />)}
               </div>
-            ) : allStats ? (
+            ) : currentPeriodStats ? (
               <div className="flex flex-col gap-5">
-                {allStats.gr.map((g: { gn: string; si: StatItem[] }) => {
+                {/* Period sub-tabs */}
+                {availablePeriods.length > 1 && (
+                  <div className="flex items-center gap-1.5 bg-surface-muted rounded-lg p-1 w-fit">
+                    {availablePeriods.map(pr => {
+                      const periodKey = `period.${pr}`;
+                      const labelT = t(periodKey);
+                      const label = labelT !== periodKey ? labelT : pr;
+                      return (
+                        <button
+                          key={pr}
+                          onClick={() => setSelectedPeriod(pr)}
+                          className={`text-[13px] px-3 py-1.5 rounded-md font-medium transition-all cursor-pointer whitespace-nowrap
+                            ${selectedPeriod === pr
+                              ? "bg-accent text-white shadow-sm"
+                              : "text-text-muted hover:text-text-primary"
+                            }`}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                {currentPeriodStats.gr.map((g: { gn: string; si: StatItem[] }) => {
                   const groupKey = `statGroups.${g.gn}`;
                   const groupNameT = t(groupKey);
                   const groupName = groupNameT !== groupKey ? groupNameT : g.gn;
                   return (
                   <div key={g.gn}>
-                    <div className="text-xs text-accent font-semibold mb-2 uppercase tracking-wide">{groupName}</div>
+                    <div className="text-[13px] text-accent font-semibold mb-2 uppercase tracking-wide">{groupName}</div>
                     {g.si.map((it: StatItem) => {
                       const max = Math.max(it.hn, it.an);
                       const hPct = max ? Math.round((it.hn / max) * 100) : 0;
@@ -617,15 +762,15 @@ export default function MatchDetail() {
                       const displayName = statNameT !== statKey ? statNameT : it.nm;
                       return (
                         <div key={it.k || it.nm} className="flex items-center gap-2.5 py-1.5">
-                          <span className="text-sm font-bold text-[#1565C0] dark:text-[#64b5f6] text-right min-w-[36px] tabular-nums">{it.hv}</span>
+                          <span className="text-[15px] font-bold text-[#1565C0] dark:text-[#64b5f6] text-right min-w-[36px] tabular-nums">{it.hv}</span>
                           <div className="flex-1 flex flex-col items-center gap-0.5 min-w-0">
-                            <span className="text-[11px] text-text-muted leading-tight text-center truncate max-w-full">{displayName}</span>
+                            <span className="text-xs text-text-muted leading-tight text-center truncate max-w-full">{displayName}</span>
                             <div className="w-full h-1.5 bg-border-light rounded-sm flex gap-0.5 overflow-hidden">
                               <div className="h-full bg-gradient-to-r from-[#1565C0] to-[#42a5f5] rounded-sm ml-auto transition-[width] duration-600" style={{ width: hPct + "%" }} />
                               <div className="h-full bg-gradient-to-r from-[#ef5350] to-[#c62828] rounded-sm transition-[width] duration-600" style={{ width: aPct + "%" }} />
                             </div>
                           </div>
-                          <span className="text-sm font-bold text-[#c62828] dark:text-[#ef5350] text-left min-w-[36px] tabular-nums">{it.av}</span>
+                          <span className="text-[15px] font-bold text-[#c62828] dark:text-[#ef5350] text-left min-w-[36px] tabular-nums">{it.av}</span>
                         </div>
                       );
                     })}
@@ -638,109 +783,155 @@ export default function MatchDetail() {
             )
           )}
 
-          {/* === INCIDENTS TAB === */}
-          {activeTab === "incidents" && (
-            incidents.length > 0 ? (
-              <div className="relative py-3 before:absolute before:left-1/2 before:top-0 before:bottom-0 before:w-0.5 before:bg-border before:-translate-x-1/2">
-                {incidents.map((ev, idx) => {
-                  if (ev.tp === "period") return (
-                    <div key={idx} className="flex justify-center items-center gap-3 py-2.5 my-1">
-                      <span className="text-[13px] font-bold text-accent bg-accent/10 px-3.5 py-1 rounded-xl">{ev.tx}</span>
-                      {ev.hsc != null && <span className="text-sm font-bold text-text-primary">{ev.hsc} - {ev.asc}</span>}
-                    </div>
-                  );
-                  if (ev.tp === "injuryTime") return (
-                    <div key={idx} className="text-center text-[11px] text-[#e6a23c] font-semibold py-1">{t("incidents.injuryTime", { n: ev.ln ?? 0 })}</div>
-                  );
-                  const ico = getIncidentIcon(ev.tp, ev.cl);
-                  const dotColors: Record<string, string> = {
-                    goal: "border-[#4caf50] bg-[#4caf50] shadow-[0_0_6px_rgba(76,175,80,0.3)]",
-                    penalty: "border-[#ff9800] bg-[#ff9800]",
-                    yellow: "border-[#f4c542] bg-[#f4c542]",
-                    red: "border-[#e53935] bg-[#e53935]",
-                    own: "border-[#e53935] bg-[#e53935]",
-                    sub: "border-[#42a5f5] bg-[#42a5f5]",
-                    var: "border-[#ab47bc] bg-[#ab47bc]",
-                    miss: "border-[#999] bg-[#999]",
-                    other: "border-[#666] bg-[#666]",
-                  };
-                  const barSide = ico.cls === "goal" ? "border-l-[#4caf50]" : ico.cls === "red" ? "border-l-[#e53935]" : ico.cls === "yellow" ? "border-l-[#f4c542]" : ico.cls === "sub" ? "border-l-[#42a5f5]" : ico.cls === "var" ? "border-l-[#ab47bc]" : "border-l-[#666]";
-                  const barSideAway = ev.ih ? "" : barSide;
-                  const barSideHome = ev.ih ? barSide.replace("border-l", "border-r") : "";
-                  return (
-                    <div key={idx} className="flex items-start mb-1">
-                      {/* Home side */}
-                      <div className="flex-1 flex flex-col items-end px-2 sm:px-5">
-                        {ev.ih === true && (
-                          <div className={`flex items-center gap-2.5 py-2.5 px-3.5 bg-surface-elevated/85 backdrop-blur-lg border border-black/8 dark:border-white/8 rounded-[10px] max-w-[280px] relative border-l-3 ${barSideHome}`}>
-                            {ico.icon && <span className="text-base shrink-0">{ico.icon}</span>}
-                            <div className={`flex flex-col gap-0.5 text-right`}>
-                              {ev.tp === "goal" || ev.tp === "inGamePenalty" ? (
-                                <>
-                                  <span className="text-[13px] font-semibold text-text-primary">{getPlayerName(ev)}</span>
-                                  {ev.a1n && <span className="text-[11px] text-accent">{t("incidents.assist")} {ev.a1n}</span>}
-                                </>
-                              ) : ev.tp === "card" ? (
-                                <>
-                                  <span className="text-[13px] font-semibold text-text-primary">{getPlayerName(ev)}</span>
-                                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${ev.cl === "red" ? "text-[#e53935] bg-[#e53935]/10 dark:bg-[#e53935]/10 bg-[#e53935]/15" : "text-[#f4c542] bg-[#f4c542]/10 dark:bg-[#f4c542]/10 bg-[#f4c542]/15"}`}>{ev.cl === "red" ? t("incidents.redCard") : t("incidents.yellowCard")}</span>
-                                </>
-                              ) : ev.tp === "substitution" ? (
-                                <>
-                                  <span className="text-[13px] text-[#4caf50] font-semibold">{ev.pin}</span>
-                                  <span className="text-[13px] text-[#e53935] line-through">{ev.pon}</span>
-                                </>
-                              ) : (
-                                <span className="text-[13px] font-semibold text-text-primary">{getPlayerName(ev) || ev.tx}</span>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </div>
+          {/* === OVERVIEW TAB === */}
+          {activeTab === "overview" && (
+            <div className="flex flex-col gap-5">
+              {/* Stats summary — always visible */}
+              <div className="flex flex-col gap-5">
+                {/* Donut charts — 3 in a row */}
+                <div className="flex justify-center gap-4 sm:gap-8 flex-wrap">
+                  {(() => {
+                    const HOME = "#1565C0"; const AWAY = "#C62828";
+                    const donutKeys = ["ballPossession", "totalShotsOnGoal", "shotsOnGoal", "shotsOffGoal"];
+                    return donutKeys.map(key => {
+                      const s = statMap.get(key);
+                      if (!s) return null;
+                      const labelT = t(`stats.${key}`);
+                      const label = labelT !== `stats.${key}` ? labelT : key;
+                      const hv = s.hn ?? (parseFloat(s.hv) || 0);
+                      const av = s.an ?? (parseFloat(s.av) || 0);
+                      return <DonutStat key={key} homeVal={hv} awayVal={av} label={label} homeColor={HOME} awayColor={AWAY} />;
+                    }).filter(Boolean);
+                  })()}
+                </div>
 
-                      {/* Time marker */}
-                      <div className="relative flex flex-col items-center min-w-[36px] py-1 z-10">
-                        <div className={`w-3 h-3 rounded-full border-2 shrink-0 mt-1.5 ${dotColors[ico.cls] || dotColors.other}`} />
-                        <span className="text-[11px] font-bold text-accent mt-1 tabular-nums">
-                          {ev.at && ev.at > 0 ? ev.tm + "+" + ev.at : ev.tm}&apos;
-                        </span>
-                      </div>
-
-                      {/* Away side */}
-                      <div className="flex-1 flex flex-col items-start px-2 sm:px-5">
-                        {ev.ih === false && (
-                          <div className={`flex items-center gap-2.5 py-2.5 px-3.5 bg-surface-elevated/85 backdrop-blur-lg border border-black/8 dark:border-white/8 rounded-[10px] max-w-[280px] relative ${barSideAway}`}>
-                            <div className="flex flex-col gap-0.5 text-left">
-                              {ev.tp === "goal" || ev.tp === "inGamePenalty" ? (
-                                <>
-                                  <span className="text-[13px] font-semibold text-text-primary">{getPlayerName(ev)}</span>
-                                  {ev.a1n && <span className="text-[11px] text-accent">{t("incidents.assist")} {ev.a1n}</span>}
-                                </>
-                              ) : ev.tp === "card" ? (
-                                <>
-                                  <span className="text-[13px] font-semibold text-text-primary">{getPlayerName(ev)}</span>
-                                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${ev.cl === "red" ? "text-[#e53935] bg-[#e53935]/10" : "text-[#f4c542] bg-[#f4c542]/10"}`}>{ev.cl === "red" ? t("incidents.redCard") : t("incidents.yellowCard")}</span>
-                                </>
-                              ) : ev.tp === "substitution" ? (
-                                <>
-                                  <span className="text-[13px] text-[#4caf50] font-semibold">{ev.pin}</span>
-                                  <span className="text-[13px] text-[#e53935] line-through">{ev.pon}</span>
-                                </>
-                              ) : (
-                                <span className="text-[13px] font-semibold text-text-primary">{getPlayerName(ev) || ev.tx}</span>
-                              )}
-                            </div>
-                            {ico.icon && <span className="text-base shrink-0">{ico.icon}</span>}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
+                {/* Bar charts — 4 items */}
+                <div className="flex gap-4 sm:gap-6 flex-wrap">
+                  {(() => {
+                    const HOME = "#1565C0"; const AWAY = "#C62828";
+                    const barKeys = ["fouls", "cornerKicks", "redCards", "yellowCards"];
+                    return barKeys.map(key => {
+                      const s = statMap.get(key);
+                      if (!s) return null;
+                      const labelT = t(`stats.${key}`);
+                      const label = labelT !== `stats.${key}` ? labelT : key;
+                      const hv = s.hn ?? (parseFloat(s.hv) || 0);
+                      const av = s.an ?? (parseFloat(s.av) || 0);
+                      return <BarStat key={key} homeVal={hv} awayVal={av} label={label} homeColor={HOME} awayColor={AWAY} />;
+                    }).filter(Boolean);
+                  })()}
+                </div>
               </div>
-            ) : (
-              <div className="text-center py-16 text-text-muted">{t("empty.noIncidents")}</div>
-            )
+
+              {/* Divider */}
+              <div className="border-t border-border" />
+
+              {/* Events section */}
+              <div>
+                <div className="text-sm font-semibold text-text-secondary mb-3">{t("tab.incidents")}</div>
+                {incidents.length > 0 ? (
+                  <div className="relative py-3 before:absolute before:left-1/2 before:top-0 before:bottom-0 before:w-0.5 before:bg-border before:-translate-x-1/2">
+                    {incidents.map((ev, idx) => {
+                      if (ev.tp === "period") return (
+                        <div key={idx} className="flex justify-center items-center gap-3 py-2.5 my-1">
+                          <span className="text-sm font-bold text-accent bg-accent/10 px-3.5 py-1 rounded-xl">{ev.tx}</span>
+                          {ev.hsc != null && <span className="text-base font-bold text-text-primary">{ev.hsc} - {ev.asc}</span>}
+                        </div>
+                      );
+                      if (ev.tp === "injuryTime") return (
+                        <div key={idx} className="text-center text-xs text-[#e6a23c] font-semibold py-1">{t("incidents.injuryTime", { n: ev.ln ?? 0 })}</div>
+                      );
+                      const ico = getIncidentIcon(ev.tp, ev.cl);
+                      const dotColors: Record<string, string> = {
+                        goal: "border-[#4caf50] bg-[#4caf50] shadow-[0_0_6px_rgba(76,175,80,0.3)]",
+                        penalty: "border-[#ff9800] bg-[#ff9800]",
+                        yellow: "border-[#f4c542] bg-[#f4c542]",
+                        red: "border-[#e53935] bg-[#e53935]",
+                        own: "border-[#e53935] bg-[#e53935]",
+                        sub: "border-[#42a5f5] bg-[#42a5f5]",
+                        var: "border-[#ab47bc] bg-[#ab47bc]",
+                        miss: "border-[#999] bg-[#999]",
+                        other: "border-[#666] bg-[#666]",
+                      };
+                      const barSide = ico.cls === "goal" ? "border-l-[#4caf50]" : ico.cls === "red" ? "border-l-[#e53935]" : ico.cls === "yellow" ? "border-l-[#f4c542]" : ico.cls === "sub" ? "border-l-[#42a5f5]" : ico.cls === "var" ? "border-l-[#ab47bc]" : "border-l-[#666]";
+                      const barSideAway = ev.ih ? "" : barSide;
+                      const barSideHome = ev.ih ? barSide.replace("border-l", "border-r") : "";
+                      return (
+                        <div key={idx} className="flex items-start mb-1">
+                          {/* Home side */}
+                          <div className="flex-1 flex flex-col items-end px-2 sm:px-5">
+                            {ev.ih === true && (
+                              <div className={`flex items-center gap-2.5 py-2.5 px-3.5 bg-surface-elevated/85 backdrop-blur-lg border border-black/8 dark:border-white/8 rounded-[10px] max-w-[280px] relative border-l-3 ${barSideHome}`}>
+                                <div className={`flex flex-col gap-0.5 text-right`}>
+                                  {ev.tp === "goal" || ev.tp === "inGamePenalty" ? (
+                                    <>
+                                      <span className="text-[13px] font-semibold text-text-primary flex items-center justify-end gap-1">
+                                        {getPlayerName(ev)}
+                                        {ev.cl !== "missed" && <span className="text-base">{"\u26BD"}</span>}
+                                      </span>
+                                      {ev.a1n && <span className="text-sm font-semibold text-accent flex items-center justify-end gap-1">{ev.a1n}<img src={bootSvg} className="w-4 h-4 inline-block" alt="" /></span>}
+                                    </>
+                                  ) : ev.tp === "card" ? (
+                                    <span className="text-sm font-semibold text-text-primary">{getPlayerName(ev)}</span>
+                                  ) : ev.tp === "substitution" ? (
+                                    <>
+                                      <span className="text-sm text-[#4caf50] font-semibold flex items-center justify-end gap-1">{ev.pin}<img src={subInSvg} className="w-3 h-4" alt="" /></span>
+                                      <span className="text-sm text-[#e53935] flex items-center justify-end gap-1">{ev.pon}<img src={subOutSvg} className="w-3 h-4" alt="" /></span>
+                                    </>
+                                  ) : (
+                                    <span className="text-sm font-semibold text-text-primary">{getPlayerName(ev) || ev.tx}</span>
+                                  )}
+                                </div>
+                                {ico.icon && <span className="shrink-0">{ico.icon}</span>}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Time marker */}
+                          <div className="relative flex flex-col items-center min-w-[36px] py-1 z-10">
+                            <div className={`w-3 h-3 rounded-full border-2 shrink-0 mt-1.5 ${dotColors[ico.cls] || dotColors.other}`} />
+                            <span className="text-xs font-bold text-accent mt-1 tabular-nums">
+                              {ev.at && ev.at > 0 ? ev.tm + "+" + ev.at : ev.tm}&apos;
+                            </span>
+                          </div>
+
+                          {/* Away side */}
+                          <div className="flex-1 flex flex-col items-start px-2 sm:px-5">
+                            {ev.ih === false && (
+                              <div className={`flex items-center gap-2.5 py-2.5 px-3.5 bg-surface-elevated/85 backdrop-blur-lg border border-black/8 dark:border-white/8 rounded-[10px] max-w-[280px] relative ${barSideAway}`}>
+                                {ico.icon && <span className="shrink-0">{ico.icon}</span>}
+                                <div className="flex flex-col gap-0.5 text-left">
+                                  {ev.tp === "goal" || ev.tp === "inGamePenalty" ? (
+                                    <>
+                                      <span className="text-[13px] font-semibold text-text-primary flex items-center gap-1">
+                                        {ev.cl !== "missed" && <span className="text-base">{"\u26BD"}</span>}
+                                        {getPlayerName(ev)}
+                                      </span>
+                                      {ev.a1n && <span className="text-sm font-semibold text-accent flex items-center gap-1"><img src={bootSvg} className="w-4 h-4 inline-block" alt="" /> {ev.a1n}</span>}
+                                    </>
+                                  ) : ev.tp === "card" ? (
+                                    <span className="text-sm font-semibold text-text-primary">{getPlayerName(ev)}</span>
+                                  ) : ev.tp === "substitution" ? (
+                                    <>
+                                      <span className="text-sm text-[#4caf50] font-semibold flex items-center gap-1"><img src={subInSvg} className="w-3 h-4" alt="" />{ev.pin}</span>
+                                      <span className="text-sm text-[#e53935] flex items-center gap-1"><img src={subOutSvg} className="w-3 h-4" alt="" />{ev.pon}</span>
+                                    </>
+                                  ) : (
+                                    <span className="text-sm font-semibold text-text-primary">{getPlayerName(ev) || ev.tx}</span>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-16 text-text-muted">{t("empty.noIncidents")}</div>
+                )}
+              </div>
+            </div>
           )}
 
           {/* === COMMENTARY TAB === */}
@@ -757,7 +948,7 @@ export default function MatchDetail() {
                     className={`flex items-start gap-3 px-2 py-3 relative group rounded-xl transition-colors hover:bg-accent/3`}
                   >
                     {/* Time — show minute if available, otherwise type text */}
-                    <span className="text-xs font-bold text-accent bg-accent/8 min-w-[42px] text-center shrink-0 mt-0.5 py-0.5 px-1.5 rounded-md tabular-nums">
+                    <span className="text-[13px] font-bold text-accent bg-accent/8 min-w-[42px] text-center shrink-0 mt-0.5 py-0.5 px-1.5 rounded-md tabular-nums">
                       {c.tm != null ? `${c.tm}'` : c.tp}
                     </span>
 
@@ -767,11 +958,11 @@ export default function MatchDetail() {
                     {/* Content */}
                     <div className="flex-1 min-w-0">
                       {c.pnm && (
-                        <span className="text-[13px] font-semibold text-text-primary">
+                        <span className="text-sm font-semibold text-text-primary">
                           {c.pnm}
                         </span>
                       )}
-                      <p className={`text-[13px] leading-relaxed ${c.pnm ? "text-text-secondary mt-0.5" : "text-text-primary"}`}>
+                      <p className={`text-sm leading-relaxed ${c.pnm ? "text-text-secondary mt-0.5" : "text-text-primary"}`}>
                         {c.tx}
                       </p>
                     </div>
@@ -802,13 +993,19 @@ export default function MatchDetail() {
                       const label = `${teamName} — ${t("lineups.substitutes")}`;
                       return (
                         <div key={ti}>
-                          <div className="text-xs text-text-secondary font-semibold mb-2">{label}</div>
+                          <div className="text-[13px] text-text-secondary font-semibold mb-2">{label}</div>
                           <div className="flex flex-col gap-1.5">
-                            {subs.map(p => (
+                            {subs.map(p => {
+                              const cards = p.cards || [];
+                              const hasMp = p.mp != null;
+                              const subIn = p.subInMin;
+                              const subOut = p.subOutMin;
+                              const teamColor = ti === 0 ? "#1565C0" : "#C62828";
+                              return (
                               <div key={(ti === 0 ? "hs" : "as") + p.sh}
                                 className="flex items-center gap-2.5 bg-surface rounded-lg px-3 py-2 border border-border-light">
                                 {/* Photo */}
-                                <div className="w-7 h-7 rounded-full bg-surface-alt flex items-center justify-center shrink-0 overflow-hidden">
+                                <div className="w-8 h-8 rounded-full bg-surface-alt flex items-center justify-center shrink-0 overflow-hidden">
                                   {p.pid ? (
                                     <img
                                       src={`/v1/image/player/${p.pid}.png`}
@@ -821,25 +1018,49 @@ export default function MatchDetail() {
                                       }}
                                     />
                                   ) : null}
-                                  <span className={`text-[10px] font-bold text-text-muted uppercase ${p.pid ? "hidden" : ""}`}>
+                                  <span className={`text-[11px] font-bold text-text-muted uppercase ${p.pid ? "hidden" : ""}`}>
                                     {p.sn}
                                   </span>
                                 </div>
                                 {/* Info */}
                                 <div className="flex-1 min-w-0 flex items-center gap-1.5">
-                                  <span className="text-[10px] font-bold text-text-muted tabular-nums w-5 text-right shrink-0">#{p.sh}</span>
-                                  <span className="text-[12px] font-medium text-text-primary truncate">{p.nm}</span>
+                                  <span className="text-[12px] font-bold text-text-muted tabular-nums w-5 text-right shrink-0">#{p.sh}</span>
+                                  <span className="text-[14px] font-medium text-text-primary truncate">{p.nm}</span>
                                 </div>
+                                {/* Minutes */}
+                                {hasMp && (
+                                  <span className="text-[13px] font-bold text-white tabular-nums px-2.5 py-0.5 rounded-full shrink-0" style={{ backgroundColor: teamColor }}>
+                                    {p.mp}&apos;
+                                  </span>
+                                )}
+                                {/* Sub indicators */}
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {subIn != null && (
+                                    <span className="flex items-center gap-0.5 text-[11px] font-semibold text-[#22C55E] bg-[#22C55E]/10 px-1.5 py-0.5 rounded-full" title={`↑ ${subIn}'`}>
+                                      <img src={subInSvg} className="w-2.5 h-4" alt="" />{subIn}&apos;
+                                    </span>
+                                  )}
+                                  {subOut != null && (
+                                    <span className="flex items-center gap-0.5 text-[11px] font-semibold text-[#EF4444] bg-[#EF4444]/10 px-1.5 py-0.5 rounded-full" title={`↓ ${subOut}'`}>
+                                      <img src={subOutSvg} className="w-2.5 h-4" alt="" />{subOut}&apos;
+                                    </span>
+                                  )}
+                                </div>
+                                {/* Cards */}
+                                {cards.map((c, ci) => {
+                                  const src = c === "red" ? redCardSvg : c === "yellowRed" ? yellowredCardSvg : yellowCardSvg;
+                                  return <img key={ci} src={src} className="w-4.5 h-5.5 shrink-0" alt="" />;
+                                })}
                                 {/* Position */}
-                                <span className="text-[9px] font-semibold text-text-muted bg-surface-alt px-1.5 py-0.5 rounded shrink-0 uppercase">
+                                <span className="text-[11px] font-semibold text-text-muted bg-surface-alt px-2 py-0.5 rounded shrink-0 uppercase">
                                   {typeof p.pos === "string" && p.pos ? p.pos : "-"}
                                 </span>
                                 {/* Age */}
                                 {p.age != null && (
-                                  <span className="text-[10px] text-text-muted shrink-0 w-6 text-right tabular-nums">{p.age}</span>
+                                  <span className="text-[12px] text-text-muted shrink-0 w-6 text-right tabular-nums">{p.age}</span>
                                 )}
                               </div>
-                            ))}
+                            )})}
                           </div>
                         </div>
                       );
@@ -859,14 +1080,14 @@ export default function MatchDetail() {
                 {/* Block 1: Head to Head */}
                 <section>
                   <div className="flex items-center justify-between mb-3 pb-1.5 border-b border-border">
-                    <h3 className="text-[15px] font-semibold text-text-secondary">
+                    <h3 className="text-base font-semibold text-text-secondary">
                       {t("h2h.headToHead")}
                       {h2h.h2h.length > 0 && <span className="text-xs text-text-muted font-normal ml-2">({t("h2h.matches", { n: h2h.h2h.length })})</span>}
                     </h3>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-text-muted">{t("h2h.show")}</span>
+                      <span className="text-[13px] text-text-muted">{t("h2h.show")}</span>
                       <select value={h2hLimit.h2h} onChange={(e) => setH2hLimit(prev => ({ ...prev, h2h: Number(e.target.value) }))}
-                        className="text-xs bg-surface-muted text-text-primary border border-border rounded-md px-2 py-1 outline-none cursor-pointer">
+                        className="text-[13px] bg-surface-muted text-text-primary border border-border rounded-md px-2 py-1 outline-none cursor-pointer">
                         {[6, 10, 20].map(n => <option key={n} value={n}>{n}</option>)}
                       </select>
                     </div>
@@ -877,11 +1098,11 @@ export default function MatchDetail() {
                 {/* Block 2: Home team fixtures */}
                 <section>
                   <div className="flex items-center justify-between mb-3 pb-1.5 border-b border-border">
-                    <h3 className="text-[15px] font-semibold text-text-secondary">{info.hnm}</h3>
+                    <h3 className="text-base font-semibold text-text-secondary">{info.hnm}</h3>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-text-muted">{t("h2h.show")}</span>
+                      <span className="text-[13px] text-text-muted">{t("h2h.show")}</span>
                       <select value={h2hLimit.home} onChange={(e) => setH2hLimit(prev => ({ ...prev, home: Number(e.target.value) }))}
-                        className="text-xs bg-surface-muted text-text-primary border border-border rounded-md px-2 py-1 outline-none cursor-pointer">
+                        className="text-[13px] bg-surface-muted text-text-primary border border-border rounded-md px-2 py-1 outline-none cursor-pointer">
                         {[6, 10, 20].map(n => <option key={n} value={n}>{n}</option>)}
                       </select>
                     </div>
@@ -895,7 +1116,7 @@ export default function MatchDetail() {
                         <button
                           key={o.key}
                           onClick={() => setTeamTab(prev => ({ ...prev, home: o.key }))}
-                          className={`text-xs px-3 py-1 rounded cursor-pointer transition-all whitespace-nowrap
+                          className={`text-[13px] px-3 py-1 rounded cursor-pointer transition-all whitespace-nowrap
                             ${teamTab.home === o.key
                               ? "bg-accent text-white font-semibold"
                               : "text-text-muted hover:text-text-primary"
@@ -917,11 +1138,11 @@ export default function MatchDetail() {
                 {/* Block 3: Away team fixtures */}
                 <section>
                   <div className="flex items-center justify-between mb-3 pb-1.5 border-b border-border">
-                    <h3 className="text-[15px] font-semibold text-text-secondary">{info.anm}</h3>
+                    <h3 className="text-base font-semibold text-text-secondary">{info.anm}</h3>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-text-muted">{t("h2h.show")}</span>
+                      <span className="text-[13px] text-text-muted">{t("h2h.show")}</span>
                       <select value={h2hLimit.away} onChange={(e) => setH2hLimit(prev => ({ ...prev, away: Number(e.target.value) }))}
-                        className="text-xs bg-surface-muted text-text-primary border border-border rounded-md px-2 py-1 outline-none cursor-pointer">
+                        className="text-[13px] bg-surface-muted text-text-primary border border-border rounded-md px-2 py-1 outline-none cursor-pointer">
                         {[6, 10, 20].map(n => <option key={n} value={n}>{n}</option>)}
                       </select>
                     </div>
@@ -935,7 +1156,7 @@ export default function MatchDetail() {
                         <button
                           key={o.key}
                           onClick={() => setTeamTab(prev => ({ ...prev, away: o.key }))}
-                          className={`text-xs px-3 py-1 rounded cursor-pointer transition-all whitespace-nowrap
+                          className={`text-[13px] px-3 py-1 rounded cursor-pointer transition-all whitespace-nowrap
                             ${teamTab.away === o.key
                               ? "bg-accent text-white font-semibold"
                               : "text-text-muted hover:text-text-primary"

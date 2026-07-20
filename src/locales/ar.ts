@@ -36,6 +36,8 @@ export default {
     ap: "ركلات ترجيح",
   },
   tab: {
+    overview: "نظرة عامة",
+    summary: "ملخص",
     incidents: "الأحداث",
     stats: "إحصائيات",
     commentary: "تعليق",
@@ -72,6 +74,7 @@ export default {
     assist: "A",
     redCard: "بطاقة حمراء",
     yellowCard: "بطاقة صفراء",
+    yellowRedCard: "بطاقة صفراء ثانية",
   },
   lineups: {
     substitutes: "البدلاء",
@@ -94,6 +97,13 @@ export default {
   },
   pitch: {
     captain: "القائد",
+  },
+  period: {
+    ALL: "المباراة كاملة",
+    "1ST": "الشوط الأول",
+    "2ND": "الشوط الثاني",
+    ET1: "ET1",
+    ET2: "ET2",
   },
   timezone: "المنطقة الزمنية",
   weekdays: ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"],
@@ -143,6 +153,9 @@ export default {
     goalsPrevented: "أهداف ممنوعة",
     highClaims: "التقاط كرات عالية",
     goalKicks: "ركلات مرمى",
+    attacks: "هجمات",
+    dangerousAttacks: "هجمات خطيرة",
+    redCards: "بطاقات حمراء",
   },
   statGroups: {
     "Match overview": "نظرة عامة",

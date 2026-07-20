@@ -36,7 +36,9 @@ export default {
     ap: "AP",
   },
   tab: {
-    incidents: "Incidents",
+    overview: "Match Overview",
+    summary: "Summary",
+    incidents: "Events",
     stats: "Stats",
     commentary: "Commentary",
     lineups: "Lineups",
@@ -72,6 +74,7 @@ export default {
     assist: "A",
     redCard: "Red Card",
     yellowCard: "Yellow Card",
+    yellowRedCard: "Second Yellow",
   },
   lineups: {
     substitutes: "Substitutes",
@@ -94,6 +97,13 @@ export default {
   },
   pitch: {
     captain: "Captain",
+  },
+  period: {
+    ALL: "Full Match",
+    "1ST": "1st Half",
+    "2ND": "2nd Half",
+    ET1: "ET1",
+    ET2: "ET2",
   },
   timezone: "Timezone",
   weekdays: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
@@ -143,6 +153,9 @@ export default {
     goalsPrevented: "Goals prevented",
     highClaims: "High claims",
     goalKicks: "Goal kicks",
+    attacks: "Attacks",
+    dangerousAttacks: "Dangerous Attacks",
+    redCards: "Red Cards",
   },
   statGroups: {
     "Match overview": "Match overview",

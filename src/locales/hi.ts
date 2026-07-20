@@ -36,6 +36,8 @@ export default {
     ap: "पेनल्टी",
   },
   tab: {
+    overview: "मैच अवलोकन",
+    summary: "सारांश",
     incidents: "घटनाएं",
     stats: "आंकड़े",
     commentary: "कमेंट्री",
@@ -72,6 +74,7 @@ export default {
     assist: "A",
     redCard: "लाल कार्ड",
     yellowCard: "पीला कार्ड",
+    yellowRedCard: "दूसरा पीला कार्ड",
   },
   lineups: {
     substitutes: "स्थानापन्न",
@@ -94,6 +97,13 @@ export default {
   },
   pitch: {
     captain: "कप्तान",
+  },
+  period: {
+    ALL: "पूरा मैच",
+    "1ST": "पहला हाफ",
+    "2ND": "दूसरा हाफ",
+    ET1: "ET1",
+    ET2: "ET2",
   },
   timezone: "समय क्षेत्र",
   weekdays: ["रवि", "सोम", "मंगल", "बुध", "गुरु", "शुक्र", "शनि"],
@@ -143,6 +153,9 @@ export default {
     goalsPrevented: "गोल रोके गए",
     highClaims: "हाई क्लेम",
     goalKicks: "गोल किक",
+    attacks: "हमले",
+    dangerousAttacks: "खतरनाक हमले",
+    redCards: "लाल कार्ड",
   },
   statGroups: {
     "Match overview": "मैच अवलोकन",
