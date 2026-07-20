@@ -75,17 +75,33 @@ app.all("/v1/*", async (c) => proxy(c));
 async function serveMatchPage(c: any, mid: string) {
   const data = await fetchMatchDetail(mid, c.env);
 
-  // Get the base HTML
+  // Get the base HTML — try ASSETS first, fall back to fetching from origin
   let html: string;
   if (c.env.ASSETS) {
-    const assetRes = await c.env.ASSETS.fetch(new Request(new URL("/", c.req.url)));
-    html = await assetRes.text();
-  } else {
-    return new Response("Not found", { status: 404 });
+    try {
+      const assetRes = await c.env.ASSETS.fetch(new Request(new URL("/", c.req.url)));
+      html = await assetRes.text();
+    } catch {
+      // ASSETS fetch failed — try origin or serve minimal page
+      html = "";
+    }
+  }
+
+  if (!html) {
+    // Fallback: try fetching index.html from the same origin, or serve a minimal SPA shell
+    try {
+      const originRes = await fetch(new URL("/", c.req.url));
+      if (originRes.ok) {
+        html = await originRes.text();
+      }
+    } catch {
+      // Last resort: minimal HTML shell
+      html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ScoreRef</title></head><body><div id="root"></div></body></html>`;
+    }
   }
 
   if (!data) {
-    // No match data — serve base HTML with default tags
+    // No match data — serve base HTML with default SPA tags
     return new Response(html, {
       headers: { "Content-Type": "text/html; charset=utf-8" },
     });
@@ -143,10 +159,14 @@ ${JSON.stringify({
 app.get("/match/:slug/:mid", async (c) => serveMatchPage(c, c.req.param("mid")));
 app.get("/match/:mid",     async (c) => serveMatchPage(c, c.req.param("mid")));
 
-// Static assets fallback
+// Static assets / SPA fallback
 app.all("*", async (c) => {
   if (c.env.ASSETS) return c.env.ASSETS.fetch(c.req.raw);
-  return new Response("Not found", { status: 404 });
+  // If no ASSETS binding, serve a minimal SPA shell
+  return new Response(
+    `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ScoreRef</title></head><body><div id="root"></div></body></html>`,
+    { headers: { "Content-Type": "text/html; charset=utf-8" } },
+  );
 });
 
 export default app;
