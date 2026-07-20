@@ -75,29 +75,33 @@ app.all("/v1/*", async (c) => proxy(c));
 async function serveMatchPage(c: any, mid: string) {
   const data = await fetchMatchDetail(mid, c.env);
 
+  const MINIMAL_HTML = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ScoreRef</title></head><body><div id="root"></div></body></html>`;
+
   // Get the base HTML — try ASSETS first, fall back to fetching from origin
-  let html: string;
+  let html = "";
   if (c.env.ASSETS) {
     try {
       const assetRes = await c.env.ASSETS.fetch(new Request(new URL("/", c.req.url)));
       html = await assetRes.text();
     } catch {
-      // ASSETS fetch failed — try origin or serve minimal page
-      html = "";
+      // ASSETS fetch failed — fall through
     }
   }
 
   if (!html) {
-    // Fallback: try fetching index.html from the same origin, or serve a minimal SPA shell
+    // Fallback: try fetching index.html from the same origin
     try {
       const originRes = await fetch(new URL("/", c.req.url));
       if (originRes.ok) {
         html = await originRes.text();
       }
     } catch {
-      // Last resort: minimal HTML shell
-      html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ScoreRef</title></head><body><div id="root"></div></body></html>`;
+      // fall through
     }
+  }
+
+  if (!html) {
+    html = MINIMAL_HTML;
   }
 
   if (!data) {
