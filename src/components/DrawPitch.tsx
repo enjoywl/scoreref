@@ -96,6 +96,8 @@ function layoutPlayers(players: Player[], side: "home" | "away", formation?: str
         const width = (n - 1) / (maxN - 1) * fullWidth;
         y = Math.round(center + width * (i / (n - 1) - 0.5));
       }
+      // Flip home team vertically so formation order matches pitch orientation
+      if (isHome) y = PITCH_H - y;
       result.push({ ...rp[i], _x: x, _y: y });
     }
   }
