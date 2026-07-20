@@ -147,7 +147,7 @@ function PlayerPhoto({ x, y, r, pid, name, fallback }: {
   );
 }
 
-function PlayerNode({ p, color, isHome, captainLabel }: { p: PositionedPlayer; color: string; isHome?: boolean; captainLabel: string }) {
+function PlayerNode({ p, color, captainLabel }: { p: PositionedPlayer; color: string; captainLabel: string }) {
   const r = 21;
   const nameY = p._y + r + 16;
 
@@ -158,8 +158,8 @@ function PlayerNode({ p, color, isHome, captainLabel }: { p: PositionedPlayer; c
 
   // Badge layout above the player circle
   const badgeH = 18;
-  const cardW = 11; const cardH = 16;
-  const subW = 9; const subH = 16;
+  const cardW = 11;
+  const subW = 9;
   const gap = 3;
 
   // Minutes pill: team-colored, wider
@@ -331,8 +331,8 @@ export default function DrawPitch({
           </g>
 
           {/* Players */}
-          {home.map(p => <PlayerNode key={"hp" + p.sh} p={p} color="#1565C0" isHome captainLabel={t("pitch.captain")} />)}
-          {away.map(p => <PlayerNode key={"ap" + p.sh} p={p} color="#C62828" isHome={false} captainLabel={t("pitch.captain")} />)}
+          {home.map(p => <PlayerNode key={"hp" + p.sh} p={p} color="#1565C0" captainLabel={t("pitch.captain")} />)}
+          {away.map(p => <PlayerNode key={"ap" + p.sh} p={p} color="#C62828" captainLabel={t("pitch.captain")} />)}
         </svg>
       </div>
 
