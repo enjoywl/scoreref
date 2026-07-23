@@ -460,6 +460,8 @@ export default function MatchDetail() {
     return unsub;
   }, [mid]);
 
+  const [tick, setTick] = useState(0);
+
   const matchTime = useMemo(() => {
     if (!info) return "";
     const sc = info.sc;
@@ -524,7 +526,7 @@ export default function MatchDetail() {
     }
 
     return info.sd || info.st || "";
-  }, [info, t]);
+  }, [info, t, tick]);
 
   const { availablePeriods, currentPeriodStats } = useMemo(() => {
     const periods = stats.map(s => s.pr);
@@ -568,6 +570,13 @@ export default function MatchDetail() {
       : info && info.sc >= 100
         ? "bg-gradient-to-br from-surface-alt/80 via-surface to-surface-alt/80 border-border"
         : "bg-gradient-to-br from-[#1a3a2a]/30 via-surface to-[#1a3a2a]/30 border-border";
+
+  // Force clock re-render every second while live
+  useEffect(() => {
+    if (!isLive) return;
+    const id = setInterval(() => setTick(t => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [isLive]);
 
   /* ---- Render ---- */
   return (
